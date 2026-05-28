@@ -5,6 +5,8 @@ DB_PATH = os.environ.get(
     "DB_PATH",
     os.path.join(os.path.dirname(__file__), "tarifas.db")
 )
+# Garante que o diretório existe (necessário para volumes no Railway)
+os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 
 GRUPOS = ["GER", "EQT", "NEOENERGIA", "ENERGISA", "LIGHT", "CEMIG", "BRASILIA"]
 
