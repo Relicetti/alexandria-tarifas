@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Dashboard</h4>
+  <div class="d-flex gap-2">
+    <a href="/tarifa-gerador" class="btn btn-outline-warning">⚡ Tarifa Gerador</a>
+    <a href="/exportar?mes={{ mes }}&grupo={{ grupo }}" class="btn btn-outline-success">↓ Exportar Excel</a>
+    <a href="/faturas/upload" class="btn btn-outline-secondary">📄 Upload Fatura</a>
+    <a href="/faturas/nova?mes={{ mes }}" class="btn btn-primary">+ Nova Fatura</a>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Mês</label>
+        <select name="mes" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
+          {% for m in meses %}
+            <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ m[:7] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Grupo</label>
+        <select name="grupo" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Todos</option>
+          {% for g in grupos %}
+            <option value="{{ g }}" {% if g == grupo %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Distribuidora</label>
+        <select name="distribuidora" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Todas</option>
+          {% for d in distribuidoras %}
+            <option value="{{ d }}" {% if d == distribuidora %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if faturas %}
+<!-- Resumo -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="fs-2 fw-bold text-primary">{{ faturas|length }}</div>
+        <div class="text-muted small">Instalações</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card text-center">
+      <div class="card-body">
+        {% set desc_medio = (faturas | map(attribute='desconto_real') | select | list | sum) / (faturas | selectattr('desconto_real') | list | length) if faturas | selectattr('desconto_real') | list | length > 0 else 0 %}
+        <div class="fs-2 fw-bold text-success">{{ "%.1f"|format(desc_medio * 100)|replace('.',',') }}%</div>
+        <div class="text-muted small">Desconto Real Médio</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela -->
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0 text-nowrap w-100" style="font-size:0.85rem">
+        <thead>
+          <tr>
+            <th style="width:1%">Grupo</th>
+            <th>Distribuidora</th>
+            <th>Instalação</th>
+            <th style="width:1%">Mês</th>
+            <th style="width:1%">Tipo</th>
+            <th style="width:1%">Modalidade</th>
+            <th class="text-end" style="width:1%">Consumo kWh</th>
+            <th class="text-end" style="width:1%">Injetado kWh</th>
+            <th class="text-end" style="width:1%">Tar. Dist.</th>
+            <th class="text-end" style="width:1%">Tar. Comp.</th>
+            <th class="text-end" style="width:1%">Tar. Geração</th>
+            <th class="text-end" style="width:1%">Desc. Real</th>
+            <th class="text-end" style="width:1%">Desc. Ref.</th>
+            <th style="width:1%"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(grupo_atual='') %}
+          {% for f in faturas %}
+            <tr>
+              <td>
+                {% if f.grupo != ns.grupo_atual %}
+                  <span class="badge bg-secondary">{{ f.grupo }}</span>
+                  {% set ns.grupo_atual = f.grupo %}
+                {% endif %}
+              </td>
+              <td>{{ f.distribuidora }}</td>
+              <td>
+                <a href="/historico/{{ f.cliente_id }}" class="text-decoration-none">{{ f.instalacao }}</a>
+                <div class="text-muted small">Usina {{ f.usina_id }}</div>
+              </td>
+              <td>{{ f.mes_referencia[:7] }}</td>
+              <td><span class="badge bg-info text-dark">{{ f.tipo_gd or '—' }}</span></td>
+              <td class="small">
+                {%- if f.modalidade == 'Geração Compartilhada' %}G. Comp.
+                {%- elif f.modalidade == 'Autoconsumo' %}Autocon.
+                {%- else %}{{ f.modalidade or '—' }}{%- endif %}
+              </td>
+              <td class="text-end">{{ "%.0f"|format(f.consumo_kwh) }}</td>
+              <td class="text-end">{{ "%.0f"|format(f.injetada_kwh) }}</td>
+              <td class="text-end text-nowrap">
+                {% if f.tarifa_distribuidora %}R$ {{ "%.4f"|format(f.tarifa_distribuidora)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if f.tarifa_compensada %}R$ {{ "%.4f"|format(f.tarifa_compensada)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if f.tarifa_geracao %}R$ {{ "%.4f"|format(f.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if f.desconto_real is not none %}
+                  {% set dr = f.desconto_real * 100 %}
+                  {% set ref = f.desconto_ref * 100 if f.desconto_ref else 0 %}
+                  <span class="{{ 'desconto-ok' if dr >= ref * 0.9 else 'desconto-baixo' }}">
+                    {{ "%.2f"|format(dr)|replace('.',',') }}%
+                  </span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if f.desconto_ref %}
+                  {{ "%.2f"|format(f.desconto_ref * 100)|replace('.',',') }}%
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <a href="/faturas/{{ f.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
+                <form method="post" action="/faturas/{{ f.id }}/deletar" class="d-inline"
+                      onsubmit="return confirm('Remover esta fatura?')">
+                  <button class="btn btn-sm btn-outline-danger">×</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="text-center py-5 text-muted">
+  <div class="fs-1">📋</div>
+  <p>Nenhuma fatura para {{ mes[:7] }}.</p>
+  <a href="/faturas/nova?mes={{ mes }}" class="btn btn-primary">Lançar primeira fatura</a>
+</div>
+{% endif %}
+
+{% endblock %}

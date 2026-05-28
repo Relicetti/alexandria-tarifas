@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Clientes</h4>
+  <a href="/clientes/novo" class="btn btn-primary">+ Novo Cliente</a>
+</div>
+
+{% if clientes %}
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Grupo</th>
+            <th>Distribuidora</th>
+            <th>Instalação</th>
+            <th>Usina ID</th>
+            <th class="text-end">Desconto Base</th>
+            <th>Bandeira</th>
+            <th>GD</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in clientes %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ c.grupo }}</span></td>
+            <td>{{ c.distribuidora }}</td>
+            <td>{{ c.instalacao }}</td>
+            <td>{{ c.usina_id }}</td>
+            <td class="text-end">{{ "%.1f%%"|format(c.desconto_base * 100) }}</td>
+            <td>
+              {% if c.cobra_band %}
+                <span class="badge bg-warning text-dark">Cobra</span>
+              {% else %}
+                <span class="badge bg-light text-muted">Não cobra</span>
+              {% endif %}
+            </td>
+            <td>{{ c.gd }}</td>
+            <td class="text-end">
+              <a href="/clientes/{{ c.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
+              <a href="/historico/{{ c.id }}" class="btn btn-sm btn-outline-secondary">Histórico</a>
+              <form method="post" action="/clientes/{{ c.id }}/deletar" class="d-inline"
+                    onsubmit="return confirm('Remover cliente e todas as faturas?')">
+                <button class="btn btn-sm btn-outline-danger">×</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <div class="fs-1">👤</div>
+  <p>Nenhum cliente cadastrado.</p>
+  <a href="/clientes/novo" class="btn btn-primary">Cadastrar primeiro cliente</a>
+</div>
+{% endif %}
+
+{% endblock %}

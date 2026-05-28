@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if cliente else 'Novo' }} Cliente{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{ 'Editar Cliente' if cliente else 'Novo Cliente' }}</h4>
+  <a href="/clientes" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+</div>
+
+<div class="card" style="max-width:620px">
+  <div class="card-body">
+    <form method="post">
+
+      <div class="mb-3">
+        <label class="form-label">Grupo (aba de cálculo)</label>
+        <select name="grupo" class="form-select" required>
+          {% for g in grupos %}
+            <option value="{{ g }}" {{ 'selected' if cliente and cliente.grupo == g else '' }}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Distribuidora / Concessionária</label>
+        <input type="text" name="distribuidora" id="distribuidora" class="form-control" required
+          list="lista-conc"
+          value="{{ cliente.distribuidora if cliente else '' }}"
+          placeholder="Digite para buscar..."
+          autocomplete="off"
+          oninput="onConcChange(this.value)">
+        <datalist id="lista-conc">
+          {% for c in concessionarias %}
+            <option value="{{ c.nome }}" data-estado="{{ c.estado }}" data-desconto="{{ '%.0f'|format(c.desconto * 100) }}">
+              {{ c.nome }} — {{ c.estado }}
+            </option>
+          {% endfor %}
+        </datalist>
+        <div class="form-text" id="hint-conc"></div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Instalação <span class="text-muted small">(número da UC)</span></label>
+        <input type="text" name="instalacao" class="form-control" required
+          value="{{ cliente.instalacao if cliente else '' }}"
+          placeholder="ex: 7739089">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Usina ID</label>
+        <input type="text" name="usina_id" class="form-control" required
+          value="{{ cliente.usina_id if cliente else '' }}"
+          placeholder="ex: 3  ou  3,4,8,101">
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-6">
+          <label class="form-label">Tipo GD</label>
+          <select name="tipo_gd" class="form-select">
+            {% for t in ['GD1', 'GD2'] %}
+              <option value="{{ t }}" {{ 'selected' if cliente and cliente.tipo_gd == t else '' }}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="form-label">Modalidade</label>
+          <select name="modalidade" class="form-select">
+            {% for m in ['Geração Compartilhada', 'Autoconsumo'] %}
+              <option value="{{ m }}" {{ 'selected' if cliente and cliente.modalidade == m else '' }}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-5">
+          <label class="form-label">Desconto Base (%)</label>
+          <div class="input-group">
+            <input type="number" step="0.01" name="desconto_base" id="desconto_base" class="form-control" required
+              value="{{ '%.2f'|format(cliente.desconto_base * 100) if cliente else '10.00' }}">
+            <span class="input-group-text">%</span>
+          </div>
+        </div>
+        <div class="col-3">
+          <label class="form-label">GD</label>
+          <input type="number" name="gd" class="form-control"
+            value="{{ cliente.gd if cliente else 1 }}">
+        </div>
+        <div class="col-4 d-flex align-items-end">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="cobra_band" id="cobra_band"
+              {{ 'checked' if cliente and cliente.cobra_band else '' }}>
+            <label class="form-check-label" for="cobra_band">Cobra bandeira</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">Observação</label>
+        <input type="text" name="obs" class="form-control"
+          value="{{ cliente.obs if cliente else '' }}">
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary px-5">Salvar</button>
+        <a href="/clientes" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const CONC = {
+  {% for c in concessionarias %}
+  "{{ c.nome }}": { estado: "{{ c.estado }}", desconto: {{ '%.2f'|format(c.desconto * 100) }} },
+  {% endfor %}
+};
+
+function onConcChange(val) {
+  const c = CONC[val];
+  const hint = document.getElementById('hint-conc');
+  if (c) {
+    document.getElementById('desconto_base').value = c.desconto.toFixed(2);
+    hint.textContent = `Estado: ${c.estado} — Desconto padrão: ${c.desconto}%`;
+    hint.className = 'form-text text-success';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+// Ao carregar, se já tiver valor, mostra o hint
+window.addEventListener('DOMContentLoaded', () => {
+  const val = document.getElementById('distribuidora').value;
+  if (val) onConcChange(val);
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Upload de Fatura{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Upload de Fatura</h4>
+  <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body py-4">
+        <form method="post" enctype="multipart/form-data" id="formUpload">
+          <div id="drop-zone"
+               class="border border-2 border-dashed rounded p-5 text-center mb-3"
+               style="cursor:pointer; border-color:#adb5bd !important"
+               onclick="document.getElementById('arquivo').click()"
+               ondragover="event.preventDefault(); this.classList.add('border-primary')"
+               ondragleave="this.classList.remove('border-primary')"
+               ondrop="onDrop(event)">
+            <div class="fs-1 mb-2">📄</div>
+            <div class="fw-semibold">Arraste o PDF aqui ou clique para selecionar</div>
+            <div class="text-muted small mt-1">Apenas arquivos .pdf</div>
+            <div id="nome-arquivo" class="mt-2 text-primary fw-semibold"></div>
+          </div>
+          <input type="file" id="arquivo" name="fatura_pdf" accept=".pdf" class="d-none"
+                 onchange="mostrarNome(this)">
+
+          <div id="aviso-api" class="alert alert-warning d-none">
+            ⚠️ <strong>ANTHROPIC_API_KEY</strong> não configurada.
+            Defina a variável de ambiente antes de usar esta função.
+          </div>
+
+          <div id="spinner" class="text-center d-none py-2">
+            <div class="spinner-border text-primary" role="status"></div>
+            <div class="mt-2 text-muted">Extraindo dados da fatura com IA...</div>
+          </div>
+
+          <button type="submit" id="btn-extrair" class="btn btn-primary w-100" disabled>
+            🔍 Extrair dados automaticamente
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-body text-muted small">
+        <strong>Como funciona:</strong>
+        <ol class="mb-0 mt-1">
+          <li>Faça upload do PDF da fatura da concessionária</li>
+          <li>A IA extrai automaticamente os dados (tarifas, consumo, etc.)</li>
+          <li>O formulário abre pré-preenchido para você revisar</li>
+          <li>Ajuste o que for necessário e salve</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function mostrarNome(input) {
+  const nome = input.files[0]?.name || '';
+  document.getElementById('nome-arquivo').textContent = nome;
+  document.getElementById('btn-extrair').disabled = !nome;
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('border-primary');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.pdf')) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('arquivo').files = dt.files;
+    mostrarNome(document.getElementById('arquivo'));
+  }
+}
+
+document.getElementById('formUpload').addEventListener('submit', function() {
+  document.getElementById('spinner').classList.remove('d-none');
+  document.getElementById('btn-extrair').disabled = true;
+});
+</script>
+
+{% endblock %}

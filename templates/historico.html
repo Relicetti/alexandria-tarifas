@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Histórico — {{ cliente.instalacao }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{{ cliente.distribuidora }} — {{ cliente.instalacao }}</h4>
+    <div class="text-muted small">Usina {{ cliente.usina_id }} &bull; Grupo {{ cliente.grupo }} &bull; Desconto base {{ "%.1f%%"|format(cliente.desconto_base * 100) }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/clientes/{{ cliente.id }}/editar" class="btn btn-outline-primary btn-sm">Editar cliente</a>
+    <a href="/faturas/nova?cliente_id={{ cliente.id }}" class="btn btn-primary btn-sm">+ Nova Fatura</a>
+    <a href="/clientes" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+  </div>
+</div>
+
+{% if faturas %}
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Mês</th>
+            <th class="text-end">Consumo (kWh)</th>
+            <th class="text-end">Injetado (kWh)</th>
+            <th class="text-end">Tarifa Dist.</th>
+            <th class="text-end">Tarifa Comp.</th>
+            <th class="text-end">Tarifa Geração</th>
+            <th class="text-end">Desconto Real</th>
+            <th class="text-end">Desconto Ref.</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in faturas %}
+          <tr>
+            <td class="fw-semibold">{{ f.mes_referencia[:7] }}</td>
+            <td class="text-end">{{ "%.0f"|format(f.consumo_kwh) }}</td>
+            <td class="text-end">{{ "%.0f"|format(f.injetada_kwh) }}</td>
+            <td class="text-end">
+              {% if f.tarifa_distribuidora %}R$ {{ "%.4f"|format(f.tarifa_distribuidora) }}{% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if f.tarifa_compensada %}R$ {{ "%.4f"|format(f.tarifa_compensada) }}{% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if f.tarifa_geracao %}
+                <strong>R$ {{ "%.4f"|format(f.tarifa_geracao) }}</strong>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if f.desconto_real is not none %}
+                {% set dr = f.desconto_real * 100 %}
+                {% set ref = f.desconto_ref * 100 if f.desconto_ref else 0 %}
+                <span class="{{ 'desconto-ok' if dr >= ref * 0.9 else 'desconto-baixo' }}">
+                  {{ "%.2f%%"|format(dr) }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if f.desconto_ref %}{{ "%.2f%%"|format(f.desconto_ref * 100) }}{% else %}—{% endif %}
+            </td>
+            <td>
+              <a href="/faturas/{{ f.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <p>Nenhuma fatura lançada para este cliente.</p>
+  <a href="/faturas/nova?cliente_id={{ cliente.id }}" class="btn btn-primary">Lançar primeira fatura</a>
+</div>
+{% endif %}
+
+{% endblock %}

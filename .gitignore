@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+debug_feedback.log
+feedback_extracao.jsonl
+# Scripts utilitários (não precisam ir para o servidor)
+analisar_import.py
+importar_historico.py
+checar_db.py
+checar_faltantes.py
+corrigir_faltantes.py
+status_final.py
+ver_recentes.py
+debug_fatura.py
+abrir.vbs
+iniciar_servidor.bat

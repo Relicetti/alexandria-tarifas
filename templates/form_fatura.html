@@ -1,0 +1,782 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if fatura else 'Nova' }} Fatura{% endblock %}
+{% block content %}
+{% macro pv(field, default='') -%}
+  {%- if fatura -%}{{ fatura[field] if fatura[field] is not none else default }}{%- elif extraido -%}{{ extraido.get(field) if extraido.get(field) is not none else default }}{%- else -%}{{ default }}{%- endif -%}
+{%- endmacro %}
+
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{ 'Editar Fatura' if fatura else 'Nova Fatura' }}</h4>
+  <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+</div>
+
+<form method="post" id="formFatura">
+  {% if extraido %}
+  <input type="hidden" name="_extraido_json" id="_extraido_json_field">
+  <script>document.getElementById('_extraido_json_field').value = JSON.stringify({{ extraido | tojson }});</script>
+  {% endif %}
+  <div class="row g-4">
+
+    <!-- ── Coluna esquerda ─────────────────────────────────── -->
+    <div class="col-md-6">
+
+      <!-- Identificação -->
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Identificação</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Cliente / Instalação</label>
+            <select name="cliente_id" id="cliente_id" class="form-select" required onchange="onClienteChange(this.value)">
+              <option value="">Selecione...</option>
+              {% if not fatura %}<option value="new" {% if cliente_pre == 'new' %}selected{% endif %}>+ Novo cliente...</option>{% endif %}
+              {% for c in clientes %}
+                <option value="{{ c.id }}"
+                  data-grupo="{{ c.grupo }}"
+                  data-desconto="{{ '%.2f'|format(c.desconto_base * 100) }}"
+                  data-cobra="{{ c.cobra_band }}"
+                  {% if fatura and fatura.cliente_id == c.id %}selected
+                  {% elif cliente_pre and cliente_pre|int == c.id %}selected{% endif %}>
+                  [{{ c.grupo }}] {{ c.distribuidora }} — {{ c.instalacao }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Novo cliente inline -->
+          <fieldset id="bloco_novo_cliente" disabled style="display:none">
+            <div class="border rounded p-3 mb-3 bg-light">
+              <div class="fw-semibold mb-2 small text-secondary">DADOS DO NOVO CLIENTE</div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small">Grupo</label>
+                  <select name="novo_grupo" id="novo_grupo" class="form-select form-select-sm"
+                    onchange="aplicarGrupo(this.value); syncDescontoNovo()">
+                    {% for g in grupos %}
+                      <option value="{{ g }}" {% if grupo_pre == g %}selected{% endif %}>{{ g }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Distribuidora</label>
+                  <input type="text" name="novo_distribuidora" id="novo_distribuidora"
+                    class="form-control form-control-sm" required
+                    list="lista-conc-nova" placeholder="Digite para buscar..."
+                    autocomplete="off" oninput="onNovoDistribChange(this.value)"
+                    value="{{ extraido.get('distribuidora', '') if extraido else '' }}">
+                  <datalist id="lista-conc-nova">
+                    {% for c in concessionarias %}
+                      <option value="{{ c.nome }}">{{ c.nome }} — {{ c.estado }}</option>
+                    {% endfor %}
+                  </datalist>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Instalação (UC)</label>
+                  <input type="text" name="novo_instalacao" class="form-control form-control-sm" required
+                    placeholder="ex: 7739089"
+                    value="{{ extraido.get('instalacao', '') if extraido else '' }}">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Usina ID</label>
+                  <input type="text" name="novo_usina_id" class="form-control form-control-sm" required
+                    placeholder="ex: 3">
+                </div>
+                <div class="col-4">
+                  <label class="form-label small">Tipo GD</label>
+                  <select name="novo_tipo_gd" class="form-select form-select-sm">
+                    <option value="GD1">GD1</option>
+                    <option value="GD2">GD2</option>
+                  </select>
+                </div>
+                <div class="col-8">
+                  <label class="form-label small">Modalidade</label>
+                  <select name="novo_modalidade" class="form-select form-select-sm">
+                    <option value="Geração Compartilhada">Geração Compartilhada</option>
+                    <option value="Autoconsumo">Autoconsumo</option>
+                  </select>
+                </div>
+                <div class="col-5">
+                  <label class="form-label small">Desconto Base (%)</label>
+                  <input type="number" step="0.01" name="novo_desconto_base" id="novo_desconto_base"
+                    class="form-control form-control-sm" value="10.00"
+                    oninput="syncDescontoNovo()">
+                </div>
+                <div class="col-7 d-flex align-items-end pb-1">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="novo_cobra_band" id="novo_cobra_band"
+                      onchange="document.getElementById('cobra_band').checked = this.checked; calcPreview()">
+                    <label class="form-check-label small" for="novo_cobra_band">Cobra bandeira</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label">Mês de Referência</label>
+              <input type="month" name="mes_referencia" class="form-control" required
+                value="{{ fatura.mes_referencia[:7] if fatura else (extraido.get('mes_referencia', mes_pre[:7]) if extraido else mes_pre[:7]) }}">
+            </div>
+            <div class="col-auto d-flex align-items-end">
+              <span id="badge-grupo" class="badge bg-secondary fs-6 mb-1">—</span>
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Valor Fatura Concessionária (R$) <span class="text-muted small">opcional</span></label>
+            <input type="number" step="0.01" name="valor_concessionaria" class="form-control"
+              value="{{ pv('valor_concessionaria') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Energia -->
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Energia</div>
+        <div class="card-body row g-3">
+          <div class="col-6">
+            <label class="form-label">Consumo (kWh)</label>
+            <input type="number" step="0.01" name="consumo_kwh" id="consumo_kwh" class="form-control calc" required
+              value="{{ pv('consumo_kwh') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Energia Injetada (kWh)</label>
+            <input type="number" step="0.01" name="injetada_kwh" id="injetada_kwh" class="form-control calc" required
+              value="{{ pv('injetada_kwh') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Desconto -->
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Desconto</div>
+        <div class="card-body row g-3">
+          <div class="col-6">
+            <label class="form-label">Desconto Base (%)</label>
+            <input type="number" step="0.01" name="desconto_base_pct" id="desconto_base_pct" class="form-control calc" required
+              value="{{ '%.2f'|format((fatura.desconto_base or 0.1)*100) if fatura else '10.00' }}">
+          </div>
+          <div class="col-6" id="bloco_desc_aplicado">
+            <label class="form-label">Desconto Aplicado (%)</label>
+            <input type="number" step="0.01" name="desconto_aplicado_pct" id="desconto_aplicado_pct" class="form-control calc"
+              value="{{ '%.2f'|format((fatura.desconto_aplicado or 0.1)*100) if fatura else '10.00' }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Bandeira -->
+      <div class="card mb-3">
+        <div class="card-header fw-semibold">Bandeira Tarifária</div>
+        <div class="card-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input calc" type="checkbox" name="cobra_band" id="cobra_band"
+              {{ 'checked' if fatura and fatura.cobra_band else '' }}>
+            <label class="form-check-label" for="cobra_band">Cobrar bandeira do cliente</label>
+          </div>
+
+          <!-- GER / EQT / CEMIG: 6 campos com kWh -->
+          <div id="bloco_band_kwh">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light"><tr>
+                  <th class="text-nowrap" style="min-width:80px">Bandeira</th>
+                  <th class="text-nowrap" style="min-width:110px">Cons. kWh</th>
+                  <th class="text-nowrap" style="min-width:110px">Cons. R$</th>
+                  <th id="th_inj_kwh" class="text-nowrap" style="min-width:110px">Inj. kWh</th>
+                  <th id="th_inj_val" class="text-nowrap" style="min-width:110px">Inj. R$</th>
+                </tr></thead>
+                <tbody>
+                  {% for tipo, label in [('amarela','Amarela'),('verm_p1','Verm. P1'),('verm_p2','Verm. P2')] %}
+                  <tr>
+                    <td class="fw-semibold small">{{ label }}</td>
+                    <td><input type="number" step="0.01" name="b_{{ tipo }}_cons_kwh" class="form-control form-control-sm calc"
+                      value="{{ pv('b_' ~ tipo ~ '_cons_kwh', '0') }}"></td>
+                    <td><input type="number" step="0.01" name="b_{{ tipo }}_cons_valor" class="form-control form-control-sm calc"
+                      value="{{ pv('b_' ~ tipo ~ '_cons_valor', '0') }}"></td>
+                    <td class="td_inj_kwh"><input type="number" step="0.01" name="b_{{ tipo }}_inj_kwh" class="form-control form-control-sm calc"
+                      value="{{ pv('b_' ~ tipo ~ '_inj_kwh', '0') }}"></td>
+                    <td class="td_inj_val"><input type="number" step="0.01" name="b_{{ tipo }}_inj_valor" class="form-control form-control-sm calc"
+                      value="{{ pv('b_' ~ tipo ~ '_inj_valor', '0') }}"></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ENERGISA / LIGHT / BRASÍLIA: só consumo R$ -->
+          <div id="bloco_band_valor" style="display:none">
+            <div class="row g-2">
+              {% for tipo, label in [('amarela','Amarela'),('verm_p1','Verm. P1'),('verm_p2','Verm. P2')] %}
+              <div class="col-4">
+                <label class="form-label small">{{ label }} Cons. (R$)</label>
+                <input type="number" step="0.01" name="b_{{ tipo }}_cons_valor" class="form-control form-control-sm calc"
+                  value="{{ pv('b_' ~ tipo ~ '_cons_valor', '0') }}">
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- NEOENERGIA: consumo R$ + injeção R$ (sem kWh) -->
+          <div id="bloco_band_val_inj" style="display:none">
+            <div class="row g-2">
+              {% for tipo, label in [('amarela','Amarela'),('verm_p1','Verm. P1'),('verm_p2','Verm. P2')] %}
+              <div class="col-4">
+                <label class="form-label small text-nowrap">{{ label }} Cons. R$</label>
+                <input type="number" step="0.01" name="b_{{ tipo }}_cons_valor" class="form-control form-control-sm calc"
+                  value="{{ pv('b_' ~ tipo ~ '_cons_valor', '0') }}">
+              </div>
+              {% endfor %}
+              {% for tipo, label in [('amarela','Amarela'),('verm_p1','Verm. P1'),('verm_p2','Verm. P2')] %}
+              <div class="col-4">
+                <label class="form-label small text-nowrap">{{ label }} Inj. R$</label>
+                <input type="number" step="0.01" name="b_{{ tipo }}_inj_valor" class="form-control form-control-sm calc"
+                  value="{{ pv('b_' ~ tipo ~ '_inj_valor', '0') }}">
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Coluna direita ──────────────────────────────────── -->
+    <div class="col-md-6">
+
+      <!-- GER: TE + TUSD separados -->
+      <div class="card mb-3 grupo-campo" id="bloco_te_tusd" style="display:none">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          Tarifas (R$/kWh)
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0"
+            data-bs-toggle="collapse" data-bs-target="#calc_ponderado"
+            style="font-size:0.75rem">⚡ Faixas ICMS</button>
+        </div>
+        <div class="card-body row g-3">
+          <div class="col-6">
+            <label class="form-label">TE Consumo</label>
+            <input type="number" step="any" name="te_consumo" id="te_consumo" class="form-control calc"
+              value="{{ pv('te_consumo') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TUSD Consumo</label>
+            <input type="number" step="any" name="tusd_consumo" id="tusd_consumo" class="form-control calc"
+              value="{{ pv('tusd_consumo') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TE Compensada</label>
+            <input type="number" step="any" name="te_compensada" id="te_compensada" class="form-control calc"
+              value="{{ pv('te_compensada') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TUSD Compensada</label>
+            <input type="number" step="any" name="tusd_compensada" id="tusd_compensada" class="form-control calc"
+              value="{{ pv('tusd_compensada') }}">
+          </div>
+
+          <!-- Calculadora de média ponderada por faixas de ICMS -->
+          <div class="col-12 collapse" id="calc_ponderado">
+            <div class="border rounded p-2 bg-light small">
+              <div class="fw-semibold mb-2 text-secondary">Calcular média ponderada (múltiplas faixas ICMS)</div>
+              <div class="text-muted mb-2" style="font-size:0.75rem">Preencha os valores da fatura. O sistema calcula e preenche os campos acima.</div>
+              <table class="table table-sm mb-2" style="font-size:0.8rem">
+                <thead class="table-light">
+                  <tr>
+                    <th>Faixa</th>
+                    <th class="text-end">kWh cons.</th>
+                    <th class="text-end">TE c/trib</th>
+                    <th class="text-end">TUSD c/trib</th>
+                    <th class="text-end">kWh inj.</th>
+                    <th class="text-end">TE inj.</th>
+                    <th class="text-end">TUSD inj.</th>
+                  </tr>
+                </thead>
+                <tbody id="pond_rows">
+                  <tr>
+                    <td class="text-muted">1</td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-c" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-i" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-i" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-i" placeholder="R$/kWh"></td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted">2</td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-c" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-i" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-i" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-i" placeholder="R$/kWh"></td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted">3</td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-c" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-c" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-kwh-i" placeholder="kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-te-i" placeholder="R$/kWh"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm pond-tusd-i" placeholder="R$/kWh"></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" class="btn btn-primary btn-sm" onclick="calcPonderado()">
+                Calcular e preencher →
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- NEOENERGIA: TUSD + TE distribuidora e compensação -->
+      <div class="card mb-3 grupo-campo" id="bloco_neo" style="display:none">
+        <div class="card-header fw-semibold">Tarifas NEOENERGIA (R$/kWh)</div>
+        <div class="card-body row g-3">
+          <div class="col-6">
+            <label class="form-label">TUSD Distribuidora</label>
+            <input type="number" step="any" name="tusd_distribuidora" class="form-control calc"
+              value="{{ pv('tusd_distribuidora') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TE Distribuidora</label>
+            <input type="number" step="any" name="te_distribuidora" class="form-control calc"
+              value="{{ pv('te_distribuidora') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TUSD Compensada <span class="text-muted small">(Cosern/PE)</span></label>
+            <input type="number" step="any" name="tusd_compensada" class="form-control calc"
+              value="{{ pv('tusd_compensada') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">TE Compensada <span class="text-muted small">(Cosern/PE)</span></label>
+            <input type="number" step="any" name="te_compensada" class="form-control calc"
+              value="{{ pv('te_compensada') }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Desconto Injeção — total R$ <span class="text-muted small">(Coelba/Elektro)</span></label>
+            <input type="number" step="0.01" name="desconto_injecao" class="form-control calc"
+              value="{{ pv('desconto_injecao') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- EQT / CEMIG / ENERGISA / LIGHT / BRASÍLIA: tarifa direta -->
+      <div class="card mb-3 grupo-campo" id="bloco_tarifa_direta" style="display:none">
+        <div class="card-header fw-semibold">Tarifa Distribuidora (R$/kWh)</div>
+        <div class="card-body">
+          <input type="number" step="any" name="tarifa_distribuidora_input" class="form-control calc"
+            value="{{ pv('tarifa_distribuidora_input') }}">
+        </div>
+      </div>
+
+      <!-- EQT: SCEE (5 campos) -->
+      <div class="card mb-3 grupo-campo" id="bloco_scee_5" style="display:none">
+        <div class="card-header fw-semibold">Valores SCEE (da fatura)</div>
+        <div class="card-body row g-2">
+          <div class="col-6">
+            <label class="form-label small">Consumo SCEE (R$)</label>
+            <input type="number" step="0.01" name="scee_consumo" class="form-control calc"
+              value="{{ pv('scee_consumo') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Injeção SCEE (R$)</label>
+            <input type="number" step="0.01" name="scee_injecao" class="form-control calc"
+              value="{{ pv('scee_injecao') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Comp. não isento (R$)</label>
+            <input type="number" step="0.01" name="scee_comp_nao_isento" class="form-control calc"
+              value="{{ pv('scee_comp_nao_isento') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Benefício bruto (R$)</label>
+            <input type="number" step="0.01" name="scee_beneficio_bruto" class="form-control calc"
+              value="{{ pv('scee_beneficio_bruto', '0') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Benefício líquido (R$)</label>
+            <input type="number" step="0.01" name="scee_beneficio_liquido" class="form-control calc"
+              value="{{ pv('scee_beneficio_liquido', '0') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- CEMIG: SCEE (3 campos) -->
+      <div class="card mb-3 grupo-campo" id="bloco_scee_3" style="display:none">
+        <div class="card-header fw-semibold">Valores SCEE (da fatura)</div>
+        <div class="card-body row g-2">
+          <div class="col-6">
+            <label class="form-label small">Consumo SCEE (R$)</label>
+            <input type="number" step="0.01" name="scee_consumo" class="form-control calc"
+              value="{{ pv('scee_consumo') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Injeção SCEE (R$)</label>
+            <input type="number" step="0.01" name="scee_injecao" class="form-control calc"
+              value="{{ pv('scee_injecao') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Comp. não isento (R$)</label>
+            <input type="number" step="0.01" name="scee_comp_nao_isento" class="form-control calc"
+              value="{{ pv('scee_comp_nao_isento') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- ENERGISA / BRASÍLIA: tarifa compensada direta + ajuste -->
+      <div class="card mb-3 grupo-campo" id="bloco_comp_ajuste" style="display:none">
+        <div class="card-header fw-semibold">Tarifa Compensada</div>
+        <div class="card-body row g-3">
+          <div class="col-6">
+            <label class="form-label">Tarifa Compensada (R$/kWh)</label>
+            <input type="number" step="any" name="tarifa_compensada_input" class="form-control calc"
+              value="{{ pv('tarifa_compensada_input') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Ajuste GD2 (R$)</label>
+            <input type="number" step="0.01" name="ajuste_gd2" class="form-control calc"
+              value="{{ pv('ajuste_gd2', '0') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- LIGHT: TUSD/TE de injeção e fornecimento -->
+      <div class="card mb-3 grupo-campo" id="bloco_light_tusd" style="display:none">
+        <div class="card-header fw-semibold">TUSD / TE GD (R$/kWh)</div>
+        <div class="card-body row g-2">
+          <div class="col-6">
+            <label class="form-label small">TUSD Injetada GD</label>
+            <input type="number" step="any" name="tusd_injetada_gd" class="form-control calc"
+              value="{{ pv('tusd_injetada_gd') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">TE Injetada GD</label>
+            <input type="number" step="any" name="te_injetada_gd" class="form-control calc"
+              value="{{ pv('te_injetada_gd') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">TUSD Fornecida GD</label>
+            <input type="number" step="any" name="tusd_fornecida_gd" class="form-control calc"
+              value="{{ pv('tusd_fornecida_gd') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">TE Fornecida GD</label>
+            <input type="number" step="any" name="te_fornecida_gd" class="form-control calc"
+              value="{{ pv('te_fornecida_gd') }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- LIGHT: Impostos -->
+      <div class="card mb-3 grupo-campo" id="bloco_impostos" style="display:none">
+        <div class="card-header fw-semibold">Impostos (para cálculo LIGHT)</div>
+        <div class="card-body row g-2">
+          <div class="col-4">
+            <label class="form-label small">Alíquota ICMS</label>
+            <input type="number" step="any" name="aliquota_icms" class="form-control calc"
+              value="{{ pv('aliquota_icms', '0') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label small">Valor ICMS (R$)</label>
+            <input type="number" step="0.01" name="valor_icms" class="form-control calc"
+              value="{{ pv('valor_icms', '0') }}">
+          </div>
+          <div class="col-4"></div>
+          <div class="col-4">
+            <label class="form-label small">Alíquota PIS</label>
+            <input type="number" step="any" name="aliquota_pis" class="form-control calc"
+              value="{{ pv('aliquota_pis', '0') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label small">Valor PIS (R$)</label>
+            <input type="number" step="0.01" name="valor_pis" class="form-control calc"
+              value="{{ pv('valor_pis', '0') }}">
+          </div>
+          <div class="col-4"></div>
+          <div class="col-4">
+            <label class="form-label small">Alíquota COFINS</label>
+            <input type="number" step="any" name="aliquota_cofins" class="form-control calc"
+              value="{{ pv('aliquota_cofins', '0') }}">
+          </div>
+          <div class="col-4">
+            <label class="form-label small">Valor COFINS (R$)</label>
+            <input type="number" step="0.01" name="valor_cofins" class="form-control calc"
+              value="{{ pv('valor_cofins', '0') }}">
+          </div>
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+
+  <!-- Preview resultado -->
+  <div class="card mb-4 border-primary" id="preview-card" style="display:none">
+    <div class="card-header bg-primary text-white fw-semibold">Resultado calculado (preview)</div>
+    <div class="card-body">
+      <div class="row text-center g-3">
+        <div class="col">
+          <div class="text-muted small">Tarifa Dist.</div>
+          <div class="fs-5 fw-bold" id="res-td">—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Tarifa Comp.</div>
+          <div class="fs-5 fw-bold" id="res-tc">—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Tarifa Geração</div>
+          <div class="fs-5 fw-bold text-primary" id="res-tg">—</div>
+        </div>
+        <div class="col">
+          <div class="text-muted small">Desconto Real</div>
+          <div class="fs-5 fw-bold text-success" id="res-dr">—</div>
+        </div>
+        <div class="col" id="col-dref">
+          <div class="text-muted small">Desconto Ref.</div>
+          <div class="fs-5 fw-bold" id="res-dref">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary px-5">Salvar</button>
+    <a href="/" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+</form>
+
+<script>
+// Configuração de visibilidade por grupo
+const GRUPO_BLOCOS = {
+  GER:       { tarifa:'te_tusd', comp:'',            band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
+  EQT:       { tarifa:'direto',  comp:'scee_5',       band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'5',   impostos:false },
+  NEOENERGIA:{ tarifa:'neo',     comp:'',            band:'val_inj', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
+  ENERGISA:  { tarifa:'direto',  comp:'comp_ajuste', band:'val', inj_kwh:false, desc:'base_aplic', scee:'',    impostos:false },
+  LIGHT:     { tarifa:'direto',  comp:'light_tusd',  band:'val', inj_kwh:false, desc:'base_aplic', scee:'',    impostos:false },
+  CEMIG:     { tarifa:'direto',  comp:'scee_3',      band:'kwh', inj_kwh:true,  desc:'base',       scee:'3',   impostos:false },
+  BRASILIA:  { tarifa:'direto',  comp:'comp_ajuste', band:'val', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
+};
+
+let grupoAtual = '{{ grupo_pre or "" }}';
+
+function aplicarGrupo(grupo) {
+  grupoAtual = grupo;
+  const cfg = GRUPO_BLOCOS[grupo] || {};
+  document.getElementById('badge-grupo').textContent = grupo || '—';
+
+  // Tarifas
+  show('bloco_te_tusd',      cfg.tarifa === 'te_tusd');
+  show('bloco_neo',          cfg.tarifa === 'neo');
+  show('bloco_tarifa_direta',cfg.tarifa === 'direto');
+
+  // Tarifa compensada
+  show('bloco_scee_5',       cfg.comp === 'scee_5');
+  show('bloco_scee_3',       cfg.comp === 'scee_3');
+  show('bloco_comp_ajuste',  cfg.comp === 'comp_ajuste');
+  show('bloco_light_tusd',   cfg.comp === 'light_tusd');
+
+  // Bandeira
+  show('bloco_band_kwh',     cfg.band === 'kwh');
+  show('bloco_band_valor',   cfg.band === 'val');
+  show('bloco_band_val_inj', cfg.band === 'val_inj');
+  // colunas injeção dentro da tabela kwh
+  document.querySelectorAll('.td_inj_kwh, .td_inj_val, #th_inj_kwh, #th_inj_val').forEach(el => {
+    el.style.display = cfg.inj_kwh ? '' : 'none';
+  });
+
+  // Desconto aplicado
+  show('bloco_desc_aplicado', cfg.desc === 'base_aplic');
+
+  // Impostos LIGHT
+  show('bloco_impostos', cfg.impostos);
+}
+
+function show(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? '' : 'none';
+}
+
+const CONC_NOVA = {
+  {% for c in concessionarias %}
+  "{{ c.nome }}": {{ '%.2f'|format(c.desconto * 100) }},
+  {% endfor %}
+};
+
+function onNovoDistribChange(val) {
+  const d = CONC_NOVA[val];
+  if (d !== undefined) {
+    document.getElementById('novo_desconto_base').value = d.toFixed(2);
+    syncDescontoNovo();
+  }
+}
+
+function syncDescontoNovo() {
+  const d = document.getElementById('novo_desconto_base').value;
+  document.getElementById('desconto_base_pct').value = d;
+  document.getElementById('desconto_aplicado_pct').value = d;
+  calcPreview();
+}
+
+function onClienteChange(clienteId) {
+  const isNew = clienteId === 'new';
+  const fs = document.getElementById('bloco_novo_cliente');
+  fs.disabled = !isNew;
+  fs.style.display = isNew ? '' : 'none';
+
+  if (isNew) {
+    aplicarGrupo(document.getElementById('novo_grupo').value);
+    syncDescontoNovo();
+    document.getElementById('cobra_band').checked = document.getElementById('novo_cobra_band').checked;
+    return;
+  }
+  if (!clienteId) return;
+  const opt = document.querySelector(`#cliente_id option[value="${clienteId}"]`);
+  if (!opt) return;
+  aplicarGrupo(opt.dataset.grupo);
+  document.getElementById('desconto_base_pct').value = opt.dataset.desconto;
+  document.getElementById('desconto_aplicado_pct').value = opt.dataset.desconto;
+  document.getElementById('cobra_band').checked = opt.dataset.cobra === '1';
+  calcPreview();
+}
+
+// ── Preview de cálculo ────────────────────────────────────────────────────────
+function v(name) { return parseFloat(document.querySelector(`[name="${name}"]`)?.value) || 0; }
+function bv(name) { return document.getElementById(name)?.checked || false; }
+
+function calcPreview() {
+  const grupo = grupoAtual;
+  if (!grupo) return;
+  const consumo = v('consumo_kwh'), inj = v('injetada_kwh');
+  if (!consumo || !inj) { document.getElementById('preview-card').style.display='none'; return; }
+
+  const db  = v('desconto_base_pct') / 100;
+  const da  = v('desconto_aplicado_pct') / 100 || db;
+  const cobra = bv('cobra_band');
+  const res_kwh = consumo - inj;
+
+  let td = 0, tc = 0, tb_cons = 0, tb_inj = 0;
+
+  // --- tarifa_dist ---
+  if (grupo === 'GER')       td = v('te_consumo') + v('tusd_consumo');
+  else if (grupo === 'NEOENERGIA') td = v('tusd_distribuidora') + v('te_distribuidora');
+  else                        td = v('tarifa_distribuidora_input');
+
+  // --- tarifa_b_cons ---
+  const b_val = v('b_amarela_cons_valor') + v('b_verm_p1_cons_valor') + v('b_verm_p2_cons_valor');
+  const b_kwh = v('b_amarela_cons_kwh') + v('b_verm_p1_cons_kwh') + v('b_verm_p2_cons_kwh');
+  if (grupo === 'GER' || grupo === 'EQT' || grupo === 'CEMIG')
+    tb_cons = b_kwh ? b_val / b_kwh : 0;
+  else if (grupo === 'ENERGISA' || grupo === 'BRASILIA')
+    tb_cons = res_kwh ? b_val / res_kwh : 0;
+  else if (grupo === 'LIGHT')
+    tb_cons = consumo ? b_val / consumo : 0;
+  else { // NEOENERGIA
+    tb_cons = consumo ? b_val / consumo : 0;
+  }
+
+  // --- tarifa_b_inj ---
+  const bi_val = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
+  const bi_kwh = v('b_amarela_inj_kwh') + v('b_verm_p1_inj_kwh') + v('b_verm_p2_inj_kwh');
+  if (['GER','EQT','CEMIG'].includes(grupo))
+    tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
+
+  // --- tarifa_comp ---
+  if (grupo === 'GER')
+    tc = v('te_compensada') + v('tusd_compensada');
+  else if (grupo === 'NEOENERGIA') {
+    const tc_tarifas = v('tusd_compensada') + v('te_compensada');
+    const di = v('desconto_injecao');
+    tc = tc_tarifas > 0 ? tc_tarifas : (inj ? di / inj : 0);
+  }
+  else if (['EQT','CEMIG'].includes(grupo)) {
+    const scee = v('scee_consumo') + v('scee_injecao') + v('scee_comp_nao_isento')
+               + v('scee_beneficio_bruto') + v('scee_beneficio_liquido');
+    tc = consumo ? (consumo * td - scee) / consumo : 0;
+  } else if (['ENERGISA','BRASILIA'].includes(grupo)) {
+    tc = v('tarifa_compensada_input') - (inj ? v('ajuste_gd2') / inj : 0);
+  } else if (grupo === 'LIGHT') {
+    const td_calc = td - tb_cons;
+    const sum_tusd = v('tusd_injetada_gd') + v('te_injetada_gd') + v('tusd_fornecida_gd') + v('te_fornecida_gd');
+    tc = inj ? (inj * td_calc - sum_tusd) / inj : 0;
+    td = td_calc;
+  }
+
+  // --- tarifa_bruta_inj ---
+  const desc_usar = ['GER','EQT','ENERGISA','LIGHT'].includes(grupo) ? da : db;
+  const tb_bruta  = (cobra ? td + tb_cons : td) * (1 - desc_usar);
+
+  // --- conc_com / conc_sem ---
+  let conc_com, conc_sem;
+  conc_sem = consumo * (td + tb_cons);
+  if (grupo === 'GER')
+    conc_com = res_kwh * td + (td - tc) * inj + tb_cons * consumo - inj * tb_inj;
+  else if (grupo === 'NEOENERGIA') {
+    const bi_neo = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
+    conc_com = td * consumo + tb_cons * consumo - tc * inj - bi_neo;
+  }
+  else
+    conc_com = res_kwh * (td + tb_cons) + (td - tc) * inj;
+
+  // --- valor_geracao ---
+  const v_ger = (tb_bruta - (td - tc) * (1 - desc_usar)) * inj;
+  const v_fat_com = v_ger === 0 ? conc_sem : conc_com + v_ger;
+  const desc_fin  = conc_sem - v_fat_com;
+  const tg  = inj ? v_ger / inj : 0;
+  const dr  = conc_sem ? desc_fin / conc_sem : 0;
+  const dref = consumo ? db * inj / consumo : 0;
+  const tem_ref = !['NEOENERGIA','CEMIG','BRASILIA'].includes(grupo);
+
+  document.getElementById('preview-card').style.display = '';
+  document.getElementById('res-td').textContent   = 'R$ ' + (grupo === 'LIGHT' ? (td + tb_cons) : td).toFixed(4);
+  document.getElementById('res-tc').textContent   = 'R$ ' + tc.toFixed(4);
+  document.getElementById('res-tg').textContent   = 'R$ ' + tg.toFixed(4);
+  document.getElementById('res-dr').textContent   = (dr * 100).toFixed(2) + '%';
+  document.getElementById('col-dref').style.display = tem_ref ? '' : 'none';
+  document.getElementById('res-dref').textContent = (dref * 100).toFixed(2) + '%';
+}
+
+function calcPonderado() {
+  function somaKwhTarifa(seletorKwh, seletorTarifa) {
+    let sumKwh = 0, sumVal = 0;
+    const ks = document.querySelectorAll(seletorKwh);
+    const ts = document.querySelectorAll(seletorTarifa);
+    ks.forEach((k, i) => {
+      const kwh = parseFloat(k.value) || 0;
+      const tar = Math.abs(parseFloat(ts[i].value) || 0);
+      sumKwh += kwh; sumVal += kwh * tar;
+    });
+    return sumKwh > 0 ? [sumKwh, sumVal / sumKwh] : [0, 0];
+  }
+  const [kwh_c, te_c]   = somaKwhTarifa('.pond-kwh-c', '.pond-te-c');
+  const [,       tusd_c] = somaKwhTarifa('.pond-kwh-c', '.pond-tusd-c');
+  const [kwh_i, te_i]   = somaKwhTarifa('.pond-kwh-i', '.pond-te-i');
+  const [,       tusd_i] = somaKwhTarifa('.pond-kwh-i', '.pond-tusd-i');
+
+  if (kwh_c > 0) {
+    document.getElementById('te_consumo').value   = te_c.toFixed(6);
+    document.getElementById('tusd_consumo').value = tusd_c.toFixed(6);
+    document.querySelector('[name=consumo_kwh]').value = kwh_c.toFixed(2);
+  }
+  if (kwh_i > 0) {
+    document.getElementById('te_compensada').value   = te_i.toFixed(6);
+    document.getElementById('tusd_compensada').value = tusd_i.toFixed(6);
+    document.querySelector('[name=injetada_kwh]').value = kwh_i.toFixed(2);
+  }
+  calcPreview();
+}
+
+// Inicialização
+document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', calcPreview));
+document.getElementById('cobra_band').addEventListener('change', calcPreview);
+if (grupoAtual) aplicarGrupo(grupoAtual);
+
+const selCliente = document.getElementById('cliente_id');
+if (selCliente.value === 'new') {
+  // Vindo de upload: abre painel novo cliente e aplica grupo extraído
+  onClienteChange('new');
+} else if (selCliente.value) {
+  calcPreview();
+}
+</script>
+{% endblock %}

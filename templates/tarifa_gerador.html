@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}Consulta Tarifa Gerador{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">⚡ Consulta de Tarifa do Gerador</h4>
+  <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+</div>
+
+<div class="row g-4">
+
+  <!-- Coluna esquerda: filtros -->
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-header text-white text-center fw-bold" style="background:#1e3a5f">
+        ⚙ FILTROS DE CONSULTA
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">1. Concessionária</label>
+          <select id="f-dist" class="form-select" onchange="consultar()">
+            <option value="">Selecione…</option>
+            {% for d in distribuidoras %}
+              <option value="{{ d }}">{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">2. Mês de Referência</label>
+          <select id="f-mes" class="form-select" onchange="consultar()">
+            <option value="">Selecione…</option>
+            {% for m in meses %}
+              <option value="{{ m[:7] }}">{{ m[:7] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">3. Modalidade (GD1 / GD2)</label>
+          <select id="f-tipo" class="form-select" onchange="consultar()">
+            <option value="">Ambas</option>
+            <option value="GD1">GD1</option>
+            <option value="GD2">GD2</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">4. Tipo de Crédito (AC / GC)</label>
+          <select id="f-modal" class="form-select" onchange="consultar()">
+            <option value="">Ambos</option>
+            <option value="AC">AC — Autoconsumo</option>
+            <option value="GC">GC — Geração Compartilhada</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="text-muted small mt-2 px-1">
+      <em>AC = Autoconsumo / GC = Geração Compartilhada</em>
+    </div>
+  </div>
+
+  <!-- Coluna direita: resultado + cálculo -->
+  <div class="col-md-7">
+
+    <!-- Resultado do banco -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header text-white text-center fw-bold" style="background:#1e3a5f">
+        📊 RESULTADO
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="fw-semibold text-muted small ps-3" style="width:45%">Concessionária:</td>
+              <td id="r-dist" class="fw-bold">—</td>
+            </tr>
+            <tr>
+              <td class="fw-semibold text-muted small ps-3">Tipo / Modalidade:</td>
+              <td id="r-tipo" class="fw-bold">—</td>
+            </tr>
+            <tr class="table-light">
+              <td class="fw-semibold text-muted small ps-3">Desconto GD:</td>
+              <td id="r-desconto" class="fw-bold text-primary">—</td>
+            </tr>
+            <tr class="table-warning">
+              <td class="fw-semibold text-muted small ps-3">Tarifa Compensada:</td>
+              <td id="r-tcomp" class="fw-bold">—</td>
+            </tr>
+            <tr class="table-warning">
+              <td class="fw-semibold text-muted small ps-3">Tarifa Distribuidora:</td>
+              <td id="r-tdist" class="fw-bold">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Cálculo T_gerador -->
+    <div class="card shadow-sm border-success">
+      <div class="card-header text-white text-center fw-bold" style="background:#28a745">
+        ⚡ CÁLCULO T_GERADOR
+      </div>
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-5">
+            <label class="form-label fw-semibold small">% Deságio Alexandria</label>
+            <div class="input-group">
+              <input type="number" id="desagio" class="form-control text-center fw-bold"
+                     placeholder="ex: 17" min="0" max="100" step="0.1"
+                     oninput="calcTgerador()"
+                     style="background:#ffffa0; font-size:1.1rem">
+              <span class="input-group-text">%</span>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold small text-success">T_gerador (R$/kWh)</label>
+            <div id="r-tger" class="form-control text-center fw-bold text-success"
+                 style="font-size:1.3rem; background:#e8f5e9; border-color:#28a745; min-height:42px">
+              —
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <button id="btn-salvar" class="btn btn-success w-100 d-none" onclick="salvarResultado()">
+              💾 Salvar
+            </button>
+          </div>
+        </div>
+
+        <!-- Fórmula visual -->
+        <div class="mt-3 p-2 rounded small text-muted" style="background:#f8f9fa; font-family:monospace; font-size:0.78rem">
+          T_gerador = (T_compensada − T_distribuidora × Desconto_GD) × (1 − Deságio)<br>
+          <span id="formula-expanded" class="text-secondary"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Tabela de resultados salvos -->
+<div class="card mt-4 shadow-sm" id="card-salvos">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">📋 Resultados Salvos</span>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/tarifa-gerador/exportar" class="btn btn-sm btn-outline-success">↓ Exportar Excel</a>
+      <span class="badge bg-secondary" id="badge-salvos">{{ salvos|length }}</span>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div id="msg-vazio" class="text-center text-muted py-4 small {% if salvos %}d-none{% endif %}">
+      Nenhum resultado salvo ainda. Calcule um T_gerador e clique em 💾 Salvar.
+    </div>
+    <div class="table-responsive {% if not salvos %}d-none{% endif %}" id="div-tbl-salvos">
+      <table class="table table-sm table-hover mb-0 small">
+        <thead style="background:#1e3a5f; color:white">
+          <tr>
+            <th class="ps-3">Distribuidora</th>
+            <th>Mês</th>
+            <th>Tipo GD</th>
+            <th>Modalidade</th>
+            <th class="text-end">Desc. GD</th>
+            <th class="text-end">Tar. Comp.</th>
+            <th class="text-end">Tar. Dist.</th>
+            <th class="text-end">Deságio</th>
+            <th class="text-end text-warning fw-bold">T_gerador</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-salvos">
+          {% for s in salvos %}
+          <tr id="row-{{ s.id }}">
+            <td class="ps-3 fw-semibold">{{ s.distribuidora }}</td>
+            <td>{{ s.mes_referencia[:7] }}</td>
+            <td><span class="badge bg-info text-dark">{{ s.tipo_gd or '—' }}</span></td>
+            <td>{{ 'Autocon.' if s.modalidade == 'AC' else ('G. Comp.' if s.modalidade == 'GC' else (s.modalidade or '—')) }}</td>
+            <td class="text-end">{{ "%.2f"|format(s.desconto_gd * 100)|replace('.',',') }}%</td>
+            <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_compensada)|replace('.',',') }}</td>
+            <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}</td>
+            <td class="text-end">{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%</td>
+            <td class="text-end fw-bold text-success">R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}</td>
+            <td class="text-end pe-2">
+              <button class="btn btn-sm btn-outline-danger py-0"
+                      onclick="deletarSalvo({{ s.id }})">×</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let dadosBanco = null;
+
+async function consultar() {
+  const dist  = document.getElementById('f-dist').value;
+  const mes   = document.getElementById('f-mes').value;
+  const tipo  = document.getElementById('f-tipo').value;
+  const modal = document.getElementById('f-modal').value;
+
+  document.getElementById('r-dist').textContent = dist || '—';
+
+  if (!dist || !mes) { resetResultado(); return; }
+
+  const params = new URLSearchParams({ distribuidora: dist, mes, tipo_gd: tipo, modalidade: modal });
+  try {
+    const resp = await fetch('/api/tarifa-gerador?' + params);
+    const data = await resp.json();
+    if (!resp.ok || data.erro) { mostrarErro(data.erro || 'Tarifa não encontrada'); return; }
+    dadosBanco = data;
+    mostrarResultado(data, tipo, modal);
+    calcTgerador();
+  } catch(e) {
+    mostrarErro('Erro: ' + e.message);
+  }
+}
+
+function mostrarResultado(data, tipo, modal) {
+  const fmtPct = v => v != null ? (v * 100).toFixed(2).replace('.', ',') + '%' : '—';
+  const fmtTar = v => v != null ? 'R$ ' + v.toFixed(6).replace('.', ',') : '—';
+  const modalLabel = modal === 'AC' ? 'Autoconsumo' : modal === 'GC' ? 'Ger. Compartilhada' : 'Todas';
+  document.getElementById('r-tipo').textContent     = (tipo || 'GD1+GD2') + ' / ' + modalLabel;
+  document.getElementById('r-desconto').textContent = fmtPct(data.desconto_gd);
+  document.getElementById('r-tcomp').textContent    = fmtTar(data.tarifa_compensada);
+  document.getElementById('r-tdist').textContent    = fmtTar(data.tarifa_distribuidora);
+}
+
+function mostrarErro(msg) {
+  dadosBanco = null;
+  document.getElementById('r-tipo').textContent     = '—';
+  document.getElementById('r-desconto').textContent = '—';
+  document.getElementById('r-tcomp').innerHTML = '<span class="text-danger small">' + msg + '</span>';
+  document.getElementById('r-tdist').innerHTML = '<span class="text-danger small">Não encontrado</span>';
+  document.getElementById('r-tger').textContent = '#ERRO!';
+  document.getElementById('r-tger').style.color = '#dc3545';
+  document.getElementById('formula-expanded').textContent = '';
+  document.getElementById('btn-salvar').classList.add('d-none');
+}
+
+function resetResultado() {
+  dadosBanco = null;
+  ['r-tipo','r-desconto','r-tcomp','r-tdist'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('r-tger').textContent = '—';
+  document.getElementById('r-tger').style.color = '';
+  document.getElementById('formula-expanded').textContent = '';
+  document.getElementById('btn-salvar').classList.add('d-none');
+}
+
+function calcTgerador() {
+  if (!dadosBanco) return;
+  const desagioInput = parseFloat(document.getElementById('desagio').value);
+  if (isNaN(desagioInput)) {
+    document.getElementById('r-tger').textContent = '—';
+    document.getElementById('formula-expanded').textContent = '';
+    document.getElementById('btn-salvar').classList.add('d-none');
+    return;
+  }
+  const desagio = desagioInput / 100;
+  const tComp   = dadosBanco.tarifa_compensada;
+  const tDist   = dadosBanco.tarifa_distribuidora;
+  const dGD     = dadosBanco.desconto_gd;
+
+  if (tComp == null || tDist == null || dGD == null) {
+    document.getElementById('r-tger').textContent = '#ERRO!';
+    document.getElementById('btn-salvar').classList.add('d-none');
+    return;
+  }
+
+  // =(C19-C20*C18)*(1-C21)
+  const tGer = (tComp - tDist * dGD) * (1 - desagio);
+  const el = document.getElementById('r-tger');
+  el.textContent = 'R$ ' + tGer.toFixed(6).replace('.', ',');
+  el.style.color = tGer >= 0 ? '#28a745' : '#dc3545';
+
+  const fmt    = v => v.toFixed(6).replace('.', ',');
+  const fmtPct = v => (v * 100).toFixed(2).replace('.', ',') + '%';
+  document.getElementById('formula-expanded').textContent =
+    `= (${fmt(tComp)} − ${fmt(tDist)} × ${fmtPct(dGD)}) × (1 − ${fmtPct(desagio)})` +
+    ` = ${fmt(tGer)}`;
+
+  // Mostra botão salvar
+  document.getElementById('btn-salvar').classList.remove('d-none');
+  document.getElementById('btn-salvar').dataset.tger   = tGer;
+  document.getElementById('btn-salvar').dataset.desagio = desagio;
+}
+
+async function salvarResultado() {
+  const btn = document.getElementById('btn-salvar');
+  const dist  = document.getElementById('f-dist').value;
+  const mes   = document.getElementById('f-mes').value;
+  const tipo  = document.getElementById('f-tipo').value || null;
+  const modal = document.getElementById('f-modal').value || null;
+
+  const payload = {
+    distribuidora:        dist,
+    mes_referencia:       mes + '-01',
+    tipo_gd:              tipo,
+    modalidade:           modal,
+    desconto_gd:          dadosBanco.desconto_gd,
+    tarifa_compensada:    dadosBanco.tarifa_compensada,
+    tarifa_distribuidora: dadosBanco.tarifa_distribuidora,
+    desagio:              parseFloat(btn.dataset.desagio),
+    t_gerador:            parseFloat(btn.dataset.tger),
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+
+  try {
+    const resp = await fetch('/api/tarifa-gerador/salvar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.erro) throw new Error(data.erro);
+    btn.textContent = '✓ Salvo!';
+    btn.classList.replace('btn-success', 'btn-outline-success');
+    setTimeout(() => { btn.textContent = '💾 Salvar'; btn.classList.replace('btn-outline-success','btn-success'); btn.disabled = false; }, 2000);
+    adicionarLinhaTabela(payload);
+  } catch(e) {
+    btn.textContent = '💾 Salvar';
+    btn.disabled = false;
+    alert('Erro ao salvar: ' + e.message);
+  }
+}
+
+function adicionarLinhaTabela(p) {
+  const tbody = document.getElementById('tbody-salvos');
+  const fmtPct = v => v != null ? (v * 100).toFixed(2).replace('.', ',') + '%' : '—';
+  const fmtTar = v => v != null ? 'R$ ' + parseFloat(v).toFixed(6).replace('.', ',') : '—';
+  const modalLabel = p.modalidade === 'AC' ? 'Autocon.' : p.modalidade === 'GC' ? 'G. Comp.' : (p.modalidade || '—');
+
+  // Esconde msg-vazio e mostra tabela
+  document.getElementById('msg-vazio').classList.add('d-none');
+  document.getElementById('div-tbl-salvos').classList.remove('d-none');
+
+  // Verifica se já existe linha com mesma chave e remove
+  tbody.querySelectorAll('tr[data-key]').forEach(tr => {
+    if (tr.dataset.key === `${p.distribuidora}|${p.mes_referencia}|${p.tipo_gd}|${p.modalidade}`) tr.remove();
+  });
+
+  const tr = document.createElement('tr');
+  tr.dataset.key = `${p.distribuidora}|${p.mes_referencia}|${p.tipo_gd}|${p.modalidade}`;
+  tr.innerHTML = `
+    <td class="ps-3 fw-semibold">${p.distribuidora}</td>
+    <td>${p.mes_referencia.substring(0,7)}</td>
+    <td><span class="badge bg-info text-dark">${p.tipo_gd || '—'}</span></td>
+    <td>${modalLabel}</td>
+    <td class="text-end">${fmtPct(p.desconto_gd)}</td>
+    <td class="text-end">${fmtTar(p.tarifa_compensada)}</td>
+    <td class="text-end">${fmtTar(p.tarifa_distribuidora)}</td>
+    <td class="text-end">${fmtPct(p.desagio)}</td>
+    <td class="text-end fw-bold text-success">${fmtTar(p.t_gerador)}</td>
+    <td class="text-end pe-2"><button class="btn btn-sm btn-outline-danger py-0" onclick="this.closest('tr').remove()">×</button></td>
+  `;
+  tbody.insertBefore(tr, tbody.firstChild);
+
+  // Atualiza badge
+  const badge = document.getElementById('badge-salvos');
+  badge.textContent = parseInt(badge.textContent || 0) + 1;
+}
+
+async function deletarSalvo(id) {
+  if (!confirm('Remover este resultado?')) return;
+  const resp = await fetch(`/api/tarifa-gerador/${id}/deletar`, { method: 'POST' });
+  if (resp.ok) {
+    const tr = document.getElementById('row-' + id);
+    if (tr) tr.remove();
+    const badge = document.getElementById('badge-salvos');
+    badge.textContent = Math.max(0, parseInt(badge.textContent) - 1);
+  }
+}
+</script>
+
+{% endblock %}
