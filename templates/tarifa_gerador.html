@@ -161,6 +161,7 @@
             <th class="text-end">Tar. Dist.</th>
             <th class="text-end">Deságio</th>
             <th class="text-end text-warning fw-bold">T_gerador</th>
+            <th class="text-end text-muted small">Salvo em</th>
             <th></th>
           </tr>
         </thead>
@@ -176,6 +177,7 @@
             <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}</td>
             <td class="text-end">{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%</td>
             <td class="text-end fw-bold text-success">R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}</td>
+            <td class="text-end text-muted small">{{ s.criado_em[:16].replace('T',' ') if s.criado_em else '—' }}</td>
             <td class="text-end pe-2">
               <button class="btn btn-sm btn-outline-danger py-0"
                       onclick="deletarSalvo({{ s.id }})">×</button>
@@ -318,7 +320,7 @@ async function salvarResultado() {
     btn.textContent = '✓ Salvo!';
     btn.classList.replace('btn-success', 'btn-outline-success');
     setTimeout(() => { btn.textContent = '💾 Salvar'; btn.classList.replace('btn-outline-success','btn-success'); btn.disabled = false; }, 2000);
-    adicionarLinhaTabela(payload);
+    adicionarLinhaTabela({...payload, criado_em: data.criado_em});
   } catch(e) {
     btn.textContent = '💾 Salvar';
     btn.disabled = false;
@@ -353,6 +355,7 @@ function adicionarLinhaTabela(p) {
     <td class="text-end">${fmtTar(p.tarifa_distribuidora)}</td>
     <td class="text-end">${fmtPct(p.desagio)}</td>
     <td class="text-end fw-bold text-success">${fmtTar(p.t_gerador)}</td>
+    <td class="text-end text-muted small">${p.criado_em ? p.criado_em.substring(0,16).replace('T',' ') : new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</td>
     <td class="text-end pe-2"><button class="btn btn-sm btn-outline-danger py-0" onclick="this.closest('tr').remove()">×</button></td>
   `;
   tbody.insertBefore(tr, tbody.firstChild);

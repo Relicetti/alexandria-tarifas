@@ -503,7 +503,14 @@ def api_salvar_tarifa_gerador():
         return jsonify({"erro": "Dados inválidos"}), 400
     try:
         db.salvar_tarifa_gerador(data)
-        return jsonify({"ok": True})
+        # Buscar criado_em do registro salvo
+        rows = db.get_tarifas_gerador(distribuidora=data.get("distribuidora"), mes=data.get("mes_referencia"))
+        criado_em = None
+        for r in rows:
+            if r["tipo_gd"] == data.get("tipo_gd") and r["modalidade"] == data.get("modalidade"):
+                criado_em = r["criado_em"]
+                break
+        return jsonify({"ok": True, "criado_em": criado_em})
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
