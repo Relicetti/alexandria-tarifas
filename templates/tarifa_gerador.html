@@ -183,11 +183,11 @@
             <td>{{ s.mes_referencia[:7] }}</td>
             <td><span class="badge bg-info text-dark">{{ s.tipo_gd or '—' }}</span></td>
             <td>{{ 'Autocon.' if s.modalidade == 'AC' else ('G. Comp.' if s.modalidade == 'GC' else (s.modalidade or '—')) }}</td>
-            <td class="text-end">{{ "%.2f"|format(s.desconto_gd * 100)|replace('.',',') }}%</td>
-            <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_compensada)|replace('.',',') }}</td>
-            <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}</td>
-            <td class="text-end">{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%</td>
-            <td class="text-end fw-bold text-success">R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}</td>
+            <td class="text-end">{% if s.desconto_gd is not none %}{{ "%.2f"|format(s.desconto_gd * 100)|replace('.',',') }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">{% if s.tarifa_compensada %}R$ {{ "%.6f"|format(s.tarifa_compensada)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">{% if s.tarifa_distribuidora %}R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">{% if s.desagio is not none %}{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end fw-bold text-success">{% if s.t_gerador %}R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end">
               {% if s.tarifa_geracao %}R$ {{ "%.6f"|format(s.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
             </td>
