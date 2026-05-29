@@ -89,6 +89,7 @@
             <th class="text-end" style="width:1%">Tar. Geração</th>
             <th class="text-end" style="width:1%">Desc. Real</th>
             <th class="text-end" style="width:1%">Desc. Ref.</th>
+            <th class="text-end text-muted small" style="width:1%">Criado em</th>
             <th style="width:1%"></th>
           </tr>
         </thead>
@@ -138,6 +139,9 @@
                 {% if f.desconto_ref %}
                   {{ "%.2f"|format(f.desconto_ref * 100)|replace('.',',') }}%
                 {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-muted small text-nowrap">
+                {{ f.criado_em[:16].replace('T',' ') if f.criado_em else '—' }}
               </td>
               <td>
                 <a href="/faturas/{{ f.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
