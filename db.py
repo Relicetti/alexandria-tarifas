@@ -167,7 +167,7 @@ def get_faturas_mes(mes):
             SELECT f.*, c.usina_id, c.distribuidora, c.instalacao, c.grupo, c.tipo_gd, c.modalidade
             FROM faturas f JOIN clientes c ON c.id=f.cliente_id
             WHERE f.mes_referencia=?
-            ORDER BY c.grupo, c.distribuidora, c.instalacao
+            ORDER BY f.criado_em DESC
         """, (mes,)).fetchall()
 
 
@@ -317,7 +317,7 @@ def get_tarifas_gerador(distribuidora=None, mes=None):
             cond.append("mes_referencia = ?"); params.append(mes[:7] + "-01")
         where = ("WHERE " + " AND ".join(cond)) if cond else ""
         return conn.execute(
-            f"SELECT * FROM tarifas_gerador {where} ORDER BY mes_referencia DESC, distribuidora",
+            f"SELECT * FROM tarifas_gerador {where} ORDER BY criado_em DESC",
             params
         ).fetchall()
 
