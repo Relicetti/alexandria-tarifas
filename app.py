@@ -679,6 +679,22 @@ def api_tarifa_gerador():
     })
 
 
+# Endpoint temporário para upload do banco de dados (protegido por token)
+@app.route("/admin/upload-db", methods=["POST"])
+def upload_db():
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if not expected or token != expected:
+        return "Unauthorized", 401
+    import db as _db
+    data = request.data
+    if not data:
+        return "No data", 400
+    with open(_db.DB_PATH, "wb") as f:
+        f.write(data)
+    return f"OK - {len(data)} bytes gravados em {_db.DB_PATH}", 200
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
