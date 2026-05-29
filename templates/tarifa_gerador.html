@@ -244,8 +244,13 @@ function mostrarResultado(data, tipo, modal) {
   const descOrig  = document.getElementById('r-desconto-origem');
   if (data.desconto_gd != null) {
     descinput.value = (data.desconto_gd * 100).toFixed(2);
-    descOrig.textContent = '↑ do banco';
-    descOrig.style.color = '#198754';
+    if (data.desconto_origem === 'clientes') {
+      descOrig.textContent = '↑ do cadastro de clientes';
+      descOrig.style.color = '#198754';
+    } else {
+      descOrig.textContent = '↑ tabela padrão Alexandria';
+      descOrig.style.color = '#0d6efd';
+    }
   } else {
     descinput.value = '';
     descOrig.textContent = '⚠ não encontrado — insira manualmente';

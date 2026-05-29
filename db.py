@@ -117,10 +117,149 @@ def get_conn():
     return conn
 
 
+_DESCONTOS_PADRAO = [
+    ("Amazonas Energia",        "AM",  0.05),
+    ("Equatorial CEA",          "AP",  0.05),
+    ("Equatorial CEEE",         "RS",  0.10),
+    ("CEGERO",                  "SC",  0.10),
+    ("CELETRO",                 "RS",  0.10),
+    ("CERCI",                   "RJ",  0.12),
+    ("CERFOX",                  "RS",  0.10),
+    ("CERMC",                   "SP",  0.10),
+    ("CERRP",                   "SP",  0.10),
+    ("CERTHIL",                 "RS",  0.10),
+    ("CERVAM",                  "SP",  0.15),
+    ("COOPERNORTE",             "RS",  0.10),
+    ("COOPERSUL",               "RS",  0.10),
+    ("COOPERZEM",               "SC",  0.10),
+    ("COPREL",                  "RS",  0.10),
+    ("CPFL Paulista",           "SP",  0.10),
+    ("CPFL Piratininga",        "SP",  0.10),
+    ("CPFL Santa Cruz",         "SP",  0.05),
+    ("Castro - DIS",            "PR",  0.10),
+    ("Cedrap",                  "SP",  0.15),
+    ("Cedri",                   "SP",  0.15),
+    ("Cejama",                  "SC",  0.10),
+    ("Celesc-DIS",              "SC",  0.10),
+    ("Celesc-DIS",              "PR",  0.10),
+    ("Cemig-D",                 "MG",  0.20),
+    ("Cemirim",                 "SP",  0.15),
+    ("Ceprag",                  "SC",  0.10),
+    ("Ceral Anitápolis",        "SC",  0.10),
+    ("Ceral Araruama",          "RJ",  0.12),
+    ("Ceral DIS",               "PR",  0.10),
+    ("Ceraça",                  "SC",  0.10),
+    ("Cerbranorte",             "SC",  0.10),
+    ("Cercos",                  "SE",  0.05),
+    ("Cerej",                   "SC",  0.10),
+    ("Ceres",                   "RJ",  0.12),
+    ("Cergal",                  "SC",  0.10),
+    ("Cergapa",                 "SC",  0.10),
+    ("Cergral",                 "SC",  0.10),
+    ("Ceriluz",                 "RS",  0.10),
+    ("Cerim",                   "SP",  0.10),
+    ("Ceripa",                  "SP",  0.05),
+    ("Ceris",                   "SP",  0.05),
+    ("Cermissões",              "RS",  0.10),
+    ("Cermoful",                "SC",  0.10),
+    ("Cernhe",                  "SP",  0.05),
+    ("Cerpalo",                 "SC",  0.10),
+    ("Cerpro",                  "SP",  0.10),
+    ("Cersad",                  "SC",  0.10),
+    ("Cersul",                  "SC",  0.10),
+    ("Certaja",                 "RS",  0.10),
+    ("Certel",                  "RS",  0.10),
+    ("Certrel",                 "SC",  0.10),
+    ("Cetril",                  "SP",  0.10),
+    ("Chesp",                   "GO",  0.05),
+    ("Cocel",                   "PR",  0.10),
+    ("Codesam",                 "SC",  0.10),
+    ("Coopera",                 "SC",  0.10),
+    ("Cooperaliança",           "SC",  0.10),
+    ("Coopercocal",             "SC",  0.10),
+    ("Cooperluz",               "RS",  0.10),
+    ("Coopermila",              "SC",  0.10),
+    ("Coorsel",                 "SC",  0.10),
+    ("Copel-DIS",               "PR",  0.10),
+    ("Creluz-D",                "RS",  0.10),
+    ("Creral",                  "RS",  0.10),
+    ("DMED",                    "MG",  0.05),
+    ("Dcelt",                   "SC",  0.10),
+    ("Demei",                   "RS",  0.10),
+    ("EDP ES",                  "ES",  0.05),
+    ("EDP SP",                  "SP",  0.10),
+    ("EFLJC",                   "SC",  0.10),
+    ("ELFSM",                   "ES",  0.05),
+    ("Energisa Sul Sudeste",    "SP",  0.05),
+    ("Eflul",                   "SC",  0.10),
+    ("Eletrocar",               "RS",  0.10),
+    ("Enel CE",                 "CE",  0.10),
+    ("Enel GO",                 "GO",  0.10),
+    ("Equatorial GO",           "GO",  0.12),
+    ("Enel RJ",                 "RJ",  0.10),
+    ("Enel SP",                 "SP",  0.05),
+    ("Energisa AC",             "AC",  0.05),
+    ("Energisa Borborema",      "PB",  0.05),
+    ("Energisa Minas Rio",      "MG",  0.05),
+    ("Energisa MS",             "MS",  0.14),
+    ("Energisa MT",             "MT",  0.14),
+    ("Energisa Nova Friburgo",  "RJ",  0.05),
+    ("Energisa PB",             "PB",  0.05),
+    ("Energisa RO",             "RO",  0.05),
+    ("Energisa SE",             "SE",  0.05),
+    ("Energisa TO",             "TO",  0.10),
+    ("Equatorial AL",           "AL",  0.10),
+    ("Equatorial MA",           "MA",  0.10),
+    ("Equatorial PA",           "PA",  0.10),
+    ("Equatorial PI",           "PI",  0.10),
+    ("Forcel",                  "PR",  0.10),
+    ("Hidropan",                "RS",  0.10),
+    ("Light",                   "RJ",  0.05),
+    ("MuxEnergia",              "RS",  0.10),
+    ("Neoenergia Brasília",     "DF",  0.10),
+    ("Neoenergia Coelba",       "BA",  0.12),
+    ("Neoenergia Cosern",       "RN",  0.10),
+    ("Neoenergia Elektro",      "SP",  0.15),
+    ("Neoenergia Pernambuco",   "PE",  0.12),
+    ("Nova Palma",              "RS",  0.10),
+    ("RGE",                     "RS",  0.10),
+    ("Roraima Energia",         "RR",  0.05),
+    ("Sulgipe",                 "SE",  0.05),
+]
+
+
+def init_descontos_padrao():
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS descontos_padrao (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                distribuidora TEXT NOT NULL,
+                estado        TEXT,
+                desconto      REAL NOT NULL,
+                UNIQUE(distribuidora, estado)
+            )
+        """)
+        conn.executemany("""
+            INSERT INTO descontos_padrao (distribuidora, estado, desconto)
+            VALUES (?, ?, ?)
+            ON CONFLICT(distribuidora, estado) DO UPDATE SET desconto=excluded.desconto
+        """, _DESCONTOS_PADRAO)
+
+
+def get_desconto_padrao(distribuidora):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT AVG(desconto) as desconto FROM descontos_padrao WHERE distribuidora = ?",
+            (distribuidora,)
+        ).fetchone()
+        return row["desconto"] if row and row["desconto"] is not None else None
+
+
 def init_db():
     from concessionarias import normalizar_distribuidora
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        init_descontos_padrao()
         for col, defn in [
             ("tipo_gd",    "TEXT NOT NULL DEFAULT 'GD1'"),
             ("modalidade", "TEXT NOT NULL DEFAULT 'Geração Compartilhada'"),

@@ -675,13 +675,19 @@ def api_tarifa_gerador():
         for r in registros
     ]
 
-    desc_gd = desc_row["desconto_gd"] if desc_row else None  # da tabela clientes (independe do mês)
+    # Desconto: 1) clientes reais cadastrados  2) tabela descontos_padrao
+    desc_gd = desc_row["desconto_gd"] if desc_row and desc_row["desconto_gd"] is not None else None
+    desc_origem = "clientes"
+    if desc_gd is None:
+        desc_gd = db.get_desconto_padrao(dist)
+        desc_origem = "padrao" if desc_gd is not None else None
 
     return jsonify({
         "tarifa_compensada":    round(row["tarifa_compensada"],    6),
         "tarifa_distribuidora": round(row["tarifa_distribuidora"], 6),
         "tarifa_geracao":       round(row["tarifa_geracao"], 6) if row["tarifa_geracao"] else None,
         "desconto_gd":          round(desc_gd, 6) if desc_gd is not None else None,
+        "desconto_origem":      desc_origem,
         "total":                row["total"],
         "total_reais":          row["total_reais"],
         "registros":            det,
