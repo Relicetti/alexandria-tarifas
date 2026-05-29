@@ -161,6 +161,8 @@
             <th class="text-end">Tar. Dist.</th>
             <th class="text-end">Deságio</th>
             <th class="text-end text-warning fw-bold">T_gerador</th>
+            <th class="text-end">Tar. Geração</th>
+            <th class="text-end text-info fw-bold">% Ganho</th>
             <th class="text-end text-white small">Salvo em</th>
             <th></th>
           </tr>
@@ -177,6 +179,14 @@
             <td class="text-end">R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}</td>
             <td class="text-end">{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%</td>
             <td class="text-end fw-bold text-success">R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}</td>
+            <td class="text-end">
+              {% if s.tarifa_geracao %}R$ {{ "%.6f"|format(s.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="text-end fw-bold text-info">
+              {% if s.tarifa_geracao and s.t_gerador %}
+                {{ "%.2f"|format((s.tarifa_geracao - s.t_gerador) / s.tarifa_geracao * 100)|replace('.',',') }}%
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
             <td class="text-end text-muted small">{{ s.criado_em[:16].replace('T',' ') if s.criado_em else '—' }}</td>
             <td class="text-end pe-2">
               <button class="btn btn-sm btn-outline-danger py-0"
@@ -302,6 +312,7 @@ async function salvarResultado() {
     desconto_gd:          dadosBanco.desconto_gd,
     tarifa_compensada:    dadosBanco.tarifa_compensada,
     tarifa_distribuidora: dadosBanco.tarifa_distribuidora,
+    tarifa_geracao:       dadosBanco.tarifa_geracao,
     desagio:              parseFloat(btn.dataset.desagio),
     t_gerador:            parseFloat(btn.dataset.tger),
   };
@@ -355,6 +366,8 @@ function adicionarLinhaTabela(p) {
     <td class="text-end">${fmtTar(p.tarifa_distribuidora)}</td>
     <td class="text-end">${fmtPct(p.desagio)}</td>
     <td class="text-end fw-bold text-success">${fmtTar(p.t_gerador)}</td>
+    <td class="text-end">${fmtTar(p.tarifa_geracao)}</td>
+    <td class="text-end fw-bold text-info">${p.tarifa_geracao && p.t_gerador ? ((p.tarifa_geracao - p.t_gerador) / p.tarifa_geracao * 100).toFixed(2).replace('.', ',') + '%' : '—'}</td>
     <td class="text-end text-muted small">${p.criado_em ? p.criado_em.substring(0,16).replace('T',' ') : new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</td>
     <td class="text-end pe-2"><button class="btn btn-sm btn-outline-danger py-0" onclick="this.closest('tr').remove()">×</button></td>
   `;

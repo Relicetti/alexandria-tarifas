@@ -275,6 +275,7 @@ def init_tarifas_gerador():
                 desconto_gd         REAL,
                 tarifa_compensada   REAL,
                 tarifa_distribuidora REAL,
+                tarifa_geracao      REAL,
                 desagio             REAL,
                 t_gerador           REAL,
                 criado_em           DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -285,9 +286,14 @@ def init_tarifas_gerador():
 
 def salvar_tarifa_gerador(data):
     cols = ["distribuidora","mes_referencia","tipo_gd","modalidade",
-            "desconto_gd","tarifa_compensada","tarifa_distribuidora","desagio","t_gerador"]
+            "desconto_gd","tarifa_compensada","tarifa_distribuidora","tarifa_geracao","desagio","t_gerador"]
     vals = [data.get(c) for c in cols]
     with get_conn() as conn:
+        # Garantir coluna existe (migração)
+        try:
+            conn.execute("ALTER TABLE tarifas_gerador ADD COLUMN tarifa_geracao REAL")
+        except Exception:
+            pass
         conn.execute(f"""
             INSERT INTO tarifas_gerador ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})
             ON CONFLICT(distribuidora, mes_referencia, tipo_gd, modalidade)
@@ -295,6 +301,7 @@ def salvar_tarifa_gerador(data):
                 desconto_gd=excluded.desconto_gd,
                 tarifa_compensada=excluded.tarifa_compensada,
                 tarifa_distribuidora=excluded.tarifa_distribuidora,
+                tarifa_geracao=excluded.tarifa_geracao,
                 desagio=excluded.desagio,
                 t_gerador=excluded.t_gerador,
                 criado_em=CURRENT_TIMESTAMP

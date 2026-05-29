@@ -616,6 +616,7 @@ def api_tarifa_gerador():
             SELECT
                 AVG(f.tarifa_compensada)    AS tarifa_compensada,
                 AVG(f.tarifa_distribuidora) AS tarifa_distribuidora,
+                AVG(f.tarifa_geracao)       AS tarifa_geracao,
                 COUNT(*)                    AS total,
                 COUNT(CASE WHEN c.instalacao NOT LIKE 'HIST-%' THEN 1 END) AS total_reais
             FROM faturas f
@@ -679,6 +680,7 @@ def api_tarifa_gerador():
     return jsonify({
         "tarifa_compensada":    round(row["tarifa_compensada"],    6),
         "tarifa_distribuidora": round(row["tarifa_distribuidora"], 6),
+        "tarifa_geracao":       round(row["tarifa_geracao"], 6) if row["tarifa_geracao"] else None,
         "desconto_gd":          round(desc_gd, 6) if desc_gd is not None else None,
         "total":                row["total"],
         "total_reais":          row["total_reais"],
