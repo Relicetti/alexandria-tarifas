@@ -78,7 +78,16 @@
             </tr>
             <tr class="table-light">
               <td class="fw-semibold text-muted small ps-3">Desconto GD:</td>
-              <td id="r-desconto" class="fw-bold text-primary">—</td>
+              <td>
+                <div class="input-group input-group-sm" style="width:140px">
+                  <input type="number" id="r-desconto" class="form-control fw-bold text-primary text-center"
+                         min="0" max="100" step="0.01" placeholder="ex: 10"
+                         oninput="calcularTGerador()"
+                         title="Desconto do cliente. Pré-preenchido do banco — edite para sobrescrever.">
+                  <span class="input-group-text">%</span>
+                </div>
+                <div id="r-desconto-origem" class="text-muted" style="font-size:0.7rem"></div>
+              </td>
             </tr>
             <tr class="table-warning">
               <td class="fw-semibold text-muted small ps-3">Tarifa Compensada:</td>
@@ -231,7 +240,17 @@ function mostrarResultado(data, tipo, modal) {
   const fmtTar = v => v != null ? 'R$ ' + v.toFixed(6).replace('.', ',') : '—';
   const modalLabel = modal === 'AC' ? 'Autoconsumo' : modal === 'GC' ? 'Ger. Compartilhada' : 'Todas';
   document.getElementById('r-tipo').textContent     = (tipo || 'GD1+GD2') + ' / ' + modalLabel;
-  document.getElementById('r-desconto').textContent = fmtPct(data.desconto_gd);
+  const descinput = document.getElementById('r-desconto');
+  const descOrig  = document.getElementById('r-desconto-origem');
+  if (data.desconto_gd != null) {
+    descinput.value = (data.desconto_gd * 100).toFixed(2);
+    descOrig.textContent = '↑ do banco';
+    descOrig.style.color = '#198754';
+  } else {
+    descinput.value = '';
+    descOrig.textContent = '⚠ não encontrado — insira manualmente';
+    descOrig.style.color = '#dc3545';
+  }
   document.getElementById('r-tcomp').textContent    = fmtTar(data.tarifa_compensada);
   document.getElementById('r-tdist').textContent    = fmtTar(data.tarifa_distribuidora);
 }
@@ -239,7 +258,8 @@ function mostrarResultado(data, tipo, modal) {
 function mostrarErro(msg) {
   dadosBanco = null;
   document.getElementById('r-tipo').textContent     = '—';
-  document.getElementById('r-desconto').textContent = '—';
+  document.getElementById('r-desconto').value = '';
+  document.getElementById('r-desconto-origem').textContent = '';
   document.getElementById('r-tcomp').innerHTML = '<span class="text-danger small">' + msg + '</span>';
   document.getElementById('r-tdist').innerHTML = '<span class="text-danger small">Não encontrado</span>';
   document.getElementById('r-tger').textContent = '#ERRO!';
@@ -250,9 +270,11 @@ function mostrarErro(msg) {
 
 function resetResultado() {
   dadosBanco = null;
-  ['r-tipo','r-desconto','r-tcomp','r-tdist'].forEach(id => {
+  ['r-tipo','r-tcomp','r-tdist'].forEach(id => {
     document.getElementById(id).textContent = '—';
   });
+  document.getElementById('r-desconto').value = '';
+  document.getElementById('r-desconto-origem').textContent = '';
   document.getElementById('r-tger').textContent = '—';
   document.getElementById('r-tger').style.color = '';
   document.getElementById('formula-expanded').textContent = '';
@@ -271,7 +293,8 @@ function calcTgerador() {
   const desagio = desagioInput / 100;
   const tComp   = dadosBanco.tarifa_compensada;
   const tDist   = dadosBanco.tarifa_distribuidora;
-  const dGD     = dadosBanco.desconto_gd;
+  const descVal = document.getElementById('r-desconto').value;
+  const dGD     = descVal !== '' ? parseFloat(descVal) / 100 : null;
 
   if (tComp == null || tDist == null || dGD == null) {
     document.getElementById('r-tger').textContent = '#ERRO!';
@@ -309,7 +332,7 @@ async function salvarResultado() {
     mes_referencia:       mes + '-01',
     tipo_gd:              tipo,
     modalidade:           modal,
-    desconto_gd:          dadosBanco.desconto_gd,
+    desconto_gd:          parseFloat(document.getElementById('r-desconto').value) / 100 || null,
     tarifa_compensada:    dadosBanco.tarifa_compensada,
     tarifa_distribuidora: dadosBanco.tarifa_distribuidora,
     tarifa_geracao:       dadosBanco.tarifa_geracao,
