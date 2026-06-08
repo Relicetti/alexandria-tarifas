@@ -594,12 +594,7 @@ function aplicarGrupo(grupo) {
 
 function show(id, visible) {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.style.display = visible ? '' : 'none';
-  // Zera inputs do bloco oculto para evitar envio de valores fantasma
-  if (!visible) {
-    el.querySelectorAll('input[type=number]').forEach(i => { i.value = '0'; });
-  }
+  if (el) el.style.display = visible ? '' : 'none';
 }
 
 const CONC_NOVA = {
@@ -770,6 +765,17 @@ function calcPonderado() {
   }
   calcPreview();
 }
+
+// Antes de submeter: desabilita inputs dos blocos de bandeira OCULTOS
+// para evitar que campos duplicados (mesmo name) enviem valor errado
+document.getElementById('formFatura').addEventListener('submit', function() {
+  ['bloco_band_kwh', 'bloco_band_valor', 'bloco_band_val_inj'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el && el.style.display === 'none') {
+      el.querySelectorAll('input').forEach(function(i) { i.disabled = true; });
+    }
+  });
+});
 
 // Inicialização
 document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', calcPreview));
