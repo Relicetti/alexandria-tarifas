@@ -704,7 +704,10 @@ function calcPreview() {
 
   // --- tarifa_bruta_inj ---
   const desc_usar = ['GER','EQT','ENERGISA','LIGHT'].includes(grupo) ? da : db;
-  const tb_bruta  = (cobra ? td + tb_cons : td) * (1 - desc_usar);
+  // ENERGISA: bandeira sempre incluída no tarifa_bruta (cobra_band não afeta o cálculo tarifário)
+  const tb_bruta = (grupo === 'ENERGISA')
+    ? (td + tb_cons) * (1 - desc_usar)
+    : (cobra ? td + tb_cons : td) * (1 - desc_usar);
 
   // --- conc_com / conc_sem ---
   let conc_com, conc_sem;

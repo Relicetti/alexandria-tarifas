@@ -156,7 +156,6 @@ def calcular_ENERGISA(d):
     inj     = _g(d, 'injetada_kwh')
     desc    = _g(d, 'desconto_aplicado')
     d_base  = _g(d, 'desconto_base')
-    cobra   = bool(d.get('cobra_band'))
     consumo_residual = consumo - inj
 
     tarifa_dist = _g(d, 'tarifa_distribuidora_input')
@@ -164,7 +163,10 @@ def calcular_ENERGISA(d):
 
     tb_cons = _b_cons_val_only(d, consumo_residual)
 
-    tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
+    # ENERGISA: bandeira sempre incluída no tarifa_bruta para cálculo consistente
+    # cobra_band não altera o modelo tarifário — apenas determina se a usina
+    # repassa ou absorve o custo da bandeira na fatura ao cliente
+    tarifa_bruta = (tarifa_dist + tb_cons) * (1 - desc)
     conc_com = _conc_B(consumo_residual, tarifa_dist, tarifa_comp, inj, tb_cons)
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
