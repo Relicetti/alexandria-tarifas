@@ -12,7 +12,9 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
-FEEDBACK_FILE = Path(__file__).parent / "feedback_extracao.jsonl"
+import db as _db
+_DATA_DIR     = Path(_db.DB_PATH).parent
+FEEDBACK_FILE = _DATA_DIR / "feedback_extracao.jsonl"
 EXTRATOR_FILE = Path(__file__).parent / "extrator.py"
 
 PROMPT_MELHORIA = """Você é um engenheiro de prompts especialista em extração de dados de faturas de energia elétrica brasileiras.

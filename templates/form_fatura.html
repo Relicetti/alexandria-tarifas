@@ -13,8 +13,7 @@
 
 <form method="post" id="formFatura">
   {% if extraido %}
-  <input type="hidden" name="_extraido_json" id="_extraido_json_field">
-  <script>document.getElementById('_extraido_json_field').value = JSON.stringify({{ extraido | tojson }});</script>
+  <input type="hidden" name="_extraido_json" value="{{ extraido | tojson }}">
   {% endif %}
   <div class="row g-4">
 

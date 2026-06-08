@@ -21,8 +21,9 @@ app.secret_key = "alexandria-tarifas-2024"
 db.init_db()
 
 
-FEEDBACK_FILE = Path(__file__).parent / "feedback_extracao.jsonl"
-DEBUG_LOG     = Path(__file__).parent / "debug_feedback.log"
+_DATA_DIR     = Path(db.DB_PATH).parent          # volume /data no Railway, pasta local caso contrário
+FEEDBACK_FILE = _DATA_DIR / "feedback_extracao.jsonl"
+DEBUG_LOG     = _DATA_DIR / "debug_feedback.log"
 
 
 def _log_debug(msg: str):
