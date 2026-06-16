@@ -257,6 +257,8 @@ def form_fatura(id=None):
             flash("Fatura salva.", "success")
             return redirect(url_for("index", mes=data["mes_referencia"]))
         except Exception as e:
+            import traceback
+            _log_debug(f"ERRO SALVAR: {e}\n{traceback.format_exc()}")
             flash(f"Erro no cálculo: {e}", "danger")
 
     token    = request.args.get("_extr")

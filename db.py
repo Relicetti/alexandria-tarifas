@@ -13,7 +13,7 @@ GRUPOS = ["GER", "EQT", "NEOENERGIA", "ENERGISA", "LIGHT", "CEMIG", "BRASILIA"]
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS faturas (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id              INTEGER,   -- legado; nullable
+    cliente_id              INTEGER,   -- legado (nullable)
 
     -- identificação inline (sem depender de clientes)
     usina_id                TEXT,
