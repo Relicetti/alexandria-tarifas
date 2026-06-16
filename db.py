@@ -285,6 +285,28 @@ def init_db():
             except Exception:
                 pass
 
+        # Migração: remove NOT NULL de cliente_id se necessário (SQLite exige recriar tabela)
+        info = conn.execute("PRAGMA table_info(faturas)").fetchall()
+        cliente_id_notnull = any(c["name"] == "cliente_id" and c["notnull"] for c in info)
+        if cliente_id_notnull:
+            existing_cols = [c["name"] for c in info]
+            conn.execute("ALTER TABLE faturas RENAME TO faturas_old")
+            # Recria com schema novo (cliente_id nullable)
+            for stmt in SCHEMA.split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    try:
+                        conn.execute(stmt)
+                    except Exception:
+                        pass
+            # Copia dados — só as colunas que existem nas duas tabelas
+            new_info = conn.execute("PRAGMA table_info(faturas)").fetchall()
+            new_cols = [c["name"] for c in new_info]
+            shared = [c for c in existing_cols if c in new_cols]
+            cols_sql = ", ".join(shared)
+            conn.execute(f"INSERT INTO faturas ({cols_sql}) SELECT {cols_sql} FROM faturas_old")
+            conn.execute("DROP TABLE faturas_old")
+
         # Migração: colunas legadas da tabela clientes
         for col, defn in [
             ("tipo_gd",    "TEXT NOT NULL DEFAULT 'GD1'"),
