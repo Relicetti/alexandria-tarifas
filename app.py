@@ -635,6 +635,36 @@ def upload_db():
     return f"OK - {len(data)} bytes gravados em {_db.DB_PATH}", 200
 
 
+@app.route("/admin/recover-faturas", methods=["POST"])
+def admin_recover_faturas():
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if not expected or token != expected:
+        return "Unauthorized", 401
+    from flask import jsonify
+    with db.get_conn() as conn:
+        # verifica se faturas_old existe
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "faturas_old" not in tables:
+            count = conn.execute("SELECT COUNT(*) FROM faturas").fetchone()[0]
+            return jsonify({"msg": "faturas_old não encontrada", "faturas_count": count})
+        # conta registros
+        old_count = conn.execute("SELECT COUNT(*) FROM faturas_old").fetchone()[0]
+        cur_count = conn.execute("SELECT COUNT(*) FROM faturas").fetchone()[0]
+        if cur_count > 0:
+            return jsonify({"msg": "faturas já tem dados, não sobrescrevo", "faturas": cur_count, "faturas_old": old_count})
+        # copia
+        old_info = conn.execute("PRAGMA table_info(faturas_old)").fetchall()
+        new_info = conn.execute("PRAGMA table_info(faturas)").fetchall()
+        old_cols = [c["name"] for c in old_info]
+        new_cols = [c["name"] for c in new_info]
+        shared = [c for c in old_cols if c in new_cols]
+        cols_sql = ", ".join(shared)
+        conn.execute(f"INSERT INTO faturas ({cols_sql}) SELECT {cols_sql} FROM faturas_old")
+        recovered = conn.execute("SELECT COUNT(*) FROM faturas").fetchone()[0]
+        return jsonify({"ok": True, "recovered": recovered, "cols": shared})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
