@@ -8,7 +8,10 @@ import json
 import threading
 import uuid
 from datetime import datetime
+import zoneinfo
 from pathlib import Path
+
+_TZ_SP = zoneinfo.ZoneInfo("America/Sao_Paulo")
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import date
@@ -48,7 +51,7 @@ def _carregar_extraido(token: str) -> dict | None:
 
 def _log_debug(msg: str):
     with open(DEBUG_LOG, "a", encoding="utf-8") as f:
-        f.write(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+        f.write(f"[{datetime.now(_TZ_SP).strftime('%H:%M:%S')}] {msg}\n")
 
 # Campos que a IA extrai e o usuário pode corrigir
 _CAMPOS_EXTRACAO = [
@@ -89,7 +92,7 @@ def _registrar_feedback(extraido_orig: dict, dados_salvos: dict):
             diffs[campo] = {"extraido": ve, "corrigido": vc}
 
     registro = {
-        "ts": datetime.now().isoformat(),
+        "ts": datetime.now(_TZ_SP).isoformat(),
         "distribuidora": extraido_orig.get("distribuidora", ""),
         "grupo": extraido_orig.get("grupo", ""),
         "diffs": diffs,
