@@ -313,7 +313,7 @@ def upload_fatura():
             if instalacao:
                 f_existente = db.get_faturas_instalacao(instalacao)
                 if f_existente:
-                    dados["_grupo"] = dados.get("_grupo") or f_existente[0].get("grupo")
+                    dados["_grupo"] = dados.get("_grupo") or f_existente[0]["grupo"]
             if not dados.get("_grupo") and dados.get("grupo"):
                 dados["_grupo"] = dados["grupo"]
             token = _salvar_extraido(dados)
