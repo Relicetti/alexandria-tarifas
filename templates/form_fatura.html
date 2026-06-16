@@ -24,100 +24,68 @@
       <div class="card mb-3">
         <div class="card-header fw-semibold">Identificação</div>
         <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label">Cliente / Instalação</label>
-            <select name="cliente_id" id="cliente_id" class="form-select" required onchange="onClienteChange(this.value)">
-              <option value="">Selecione...</option>
-              {% if not fatura %}<option value="new" {% if cliente_pre == 'new' %}selected{% endif %}>+ Novo cliente...</option>{% endif %}
-              {% for c in clientes %}
-                <option value="{{ c.id }}"
-                  data-grupo="{{ c.grupo }}"
-                  data-desconto="{{ '%.2f'|format(c.desconto_base * 100) }}"
-                  data-cobra="{{ c.cobra_band }}"
-                  {% if fatura and fatura.cliente_id == c.id %}selected
-                  {% elif cliente_pre and cliente_pre|int == c.id %}selected{% endif %}>
-                  [{{ c.grupo }}] {{ c.distribuidora }} — {{ c.instalacao }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <!-- Novo cliente inline -->
-          <fieldset id="bloco_novo_cliente" disabled style="display:none">
-            <div class="border rounded p-3 mb-3 bg-light">
-              <div class="fw-semibold mb-2 small text-secondary">DADOS DO NOVO CLIENTE</div>
-              <div class="row g-2">
-                <div class="col-6">
-                  <label class="form-label small">Grupo</label>
-                  <select name="novo_grupo" id="novo_grupo" class="form-select form-select-sm"
-                    onchange="aplicarGrupo(this.value); syncDescontoNovo()">
-                    {% for g in grupos %}
-                      <option value="{{ g }}" {% if grupo_pre == g %}selected{% endif %}>{{ g }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-6">
-                  <label class="form-label small">Distribuidora</label>
-                  <input type="text" name="novo_distribuidora" id="novo_distribuidora"
-                    class="form-control form-control-sm" required
-                    list="lista-conc-nova" placeholder="Digite para buscar..."
-                    autocomplete="off" oninput="onNovoDistribChange(this.value)"
-                    value="{{ extraido.get('distribuidora', '') if extraido else '' }}">
-                  <datalist id="lista-conc-nova">
-                    {% for c in concessionarias %}
-                      <option value="{{ c.nome }}">{{ c.nome }} — {{ c.estado }}</option>
-                    {% endfor %}
-                  </datalist>
-                </div>
-                <div class="col-6">
-                  <label class="form-label small">Instalação (UC)</label>
-                  <input type="text" name="novo_instalacao" class="form-control form-control-sm" required
-                    placeholder="ex: 7739089"
-                    value="{{ extraido.get('instalacao', '') if extraido else '' }}">
-                </div>
-                <div class="col-6">
-                  <label class="form-label small">Usina ID</label>
-                  <input type="text" name="novo_usina_id" class="form-control form-control-sm" required
-                    placeholder="ex: 3">
-                </div>
-                <div class="col-4">
-                  <label class="form-label small">Tipo GD</label>
-                  <select name="novo_tipo_gd" class="form-select form-select-sm">
-                    <option value="GD1">GD1</option>
-                    <option value="GD2">GD2</option>
-                  </select>
-                </div>
-                <div class="col-8">
-                  <label class="form-label small">Modalidade</label>
-                  <select name="novo_modalidade" class="form-select form-select-sm">
-                    <option value="Geração Compartilhada">Geração Compartilhada</option>
-                    <option value="Autoconsumo">Autoconsumo</option>
-                  </select>
-                </div>
-                <div class="col-5">
-                  <label class="form-label small">Desconto Base (%)</label>
-                  <input type="number" step="0.01" name="novo_desconto_base" id="novo_desconto_base"
-                    class="form-control form-control-sm" value="10.00"
-                    oninput="syncDescontoNovo()">
-                </div>
-                <div class="col-7 d-flex align-items-end pb-1">
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="novo_cobra_band" id="novo_cobra_band"
-                      onchange="document.getElementById('cobra_band').checked = this.checked; calcPreview()">
-                    <label class="form-check-label small" for="novo_cobra_band">Cobra bandeira</label>
-                  </div>
-                </div>
-              </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label">Grupo</label>
+              <select name="grupo" id="grupo" class="form-select" required
+                onchange="aplicarGrupo(this.value)">
+                {% for g in grupos %}
+                  <option value="{{ g }}" {% if (fatura and fatura.grupo == g) or grupo_pre == g %}selected{% endif %}>{{ g }}</option>
+                {% endfor %}
+              </select>
             </div>
-          </fieldset>
+            <div class="col-6 d-flex align-items-end">
+              <span id="badge-grupo" class="badge bg-secondary fs-6 mb-1">—</span>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Distribuidora</label>
+            <input type="text" name="distribuidora" id="distribuidora"
+              class="form-control" required
+              list="lista-conc" placeholder="Digite para buscar..."
+              autocomplete="off"
+              value="{{ fatura.distribuidora if fatura else (extraido.get('distribuidora', '') if extraido else '') }}">
+            <datalist id="lista-conc">
+              {% for c in concessionarias %}
+                <option value="{{ c.nome }}">{{ c.nome }} — {{ c.estado }}</option>
+              {% endfor %}
+            </datalist>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label">Instalação (UC)</label>
+              <input type="text" name="instalacao" class="form-control" required
+                placeholder="ex: 7739089"
+                value="{{ fatura.instalacao if fatura else (extraido.get('instalacao', '') if extraido else '') }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Usina ID</label>
+              <input type="text" name="usina_id" class="form-control"
+                placeholder="ex: 3"
+                value="{{ fatura.usina_id if fatura else '' }}">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-4">
+              <label class="form-label">Tipo GD</label>
+              <select name="tipo_gd" class="form-select">
+                <option value="GD1" {% if (fatura and fatura.tipo_gd == 'GD1') or not fatura %}selected{% endif %}>GD1</option>
+                <option value="GD2" {% if fatura and fatura.tipo_gd == 'GD2' %}selected{% endif %}>GD2</option>
+              </select>
+            </div>
+            <div class="col-8">
+              <label class="form-label">Modalidade</label>
+              <select name="modalidade" class="form-select">
+                <option value="Geração Compartilhada" {% if not fatura or fatura.modalidade == 'Geração Compartilhada' %}selected{% endif %}>Geração Compartilhada</option>
+                <option value="Autoconsumo" {% if fatura and fatura.modalidade == 'Autoconsumo' %}selected{% endif %}>Autoconsumo</option>
+              </select>
+            </div>
+          </div>
           <div class="row g-2 mb-2">
             <div class="col">
               <label class="form-label">Mês de Referência</label>
               <input type="month" name="mes_referencia" class="form-control" required
                 value="{{ fatura.mes_referencia[:7] if fatura else (extraido.get('mes_referencia', mes_pre[:7]) if extraido else mes_pre[:7]) }}">
-            </div>
-            <div class="col-auto d-flex align-items-end">
-              <span id="badge-grupo" class="badge bg-secondary fs-6 mb-1">—</span>
             </div>
           </div>
           <div>
@@ -551,7 +519,7 @@ const GRUPO_BLOCOS = {
   GER:       { tarifa:'te_tusd', comp:'',            band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
   EQT:       { tarifa:'direto',  comp:'scee_5',       band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'5',   impostos:false },
   NEOENERGIA:{ tarifa:'neo',     comp:'',            band:'val_inj', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
-  ENERGISA:  { tarifa:'direto',  comp:'comp_ajuste', band:'val', inj_kwh:false, desc:'base_aplic', scee:'',    impostos:false },
+  ENERGISA:  { tarifa:'direto',  comp:'comp_ajuste', band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
   LIGHT:     { tarifa:'direto',  comp:'light_tusd',  band:'val', inj_kwh:false, desc:'base_aplic', scee:'',    impostos:false },
   CEMIG:     { tarifa:'direto',  comp:'scee_3',      band:'kwh', inj_kwh:true,  desc:'base',       scee:'3',   impostos:false },
   BRASILIA:  { tarifa:'direto',  comp:'comp_ajuste', band:'val', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
@@ -596,49 +564,6 @@ function show(id, visible) {
   if (el) el.style.display = visible ? '' : 'none';
 }
 
-const CONC_NOVA = {
-  {% for c in concessionarias %}
-  "{{ c.nome }}": {{ '%.2f'|format(c.desconto * 100) }},
-  {% endfor %}
-};
-
-function onNovoDistribChange(val) {
-  const d = CONC_NOVA[val];
-  if (d !== undefined) {
-    document.getElementById('novo_desconto_base').value = d.toFixed(2);
-    syncDescontoNovo();
-  }
-}
-
-function syncDescontoNovo() {
-  const d = document.getElementById('novo_desconto_base').value;
-  document.getElementById('desconto_base_pct').value = d;
-  document.getElementById('desconto_aplicado_pct').value = d;
-  calcPreview();
-}
-
-function onClienteChange(clienteId) {
-  const isNew = clienteId === 'new';
-  const fs = document.getElementById('bloco_novo_cliente');
-  fs.disabled = !isNew;
-  fs.style.display = isNew ? '' : 'none';
-
-  if (isNew) {
-    aplicarGrupo(document.getElementById('novo_grupo').value);
-    syncDescontoNovo();
-    document.getElementById('cobra_band').checked = document.getElementById('novo_cobra_band').checked;
-    return;
-  }
-  if (!clienteId) return;
-  const opt = document.querySelector(`#cliente_id option[value="${clienteId}"]`);
-  if (!opt) return;
-  aplicarGrupo(opt.dataset.grupo);
-  document.getElementById('desconto_base_pct').value = opt.dataset.desconto;
-  document.getElementById('desconto_aplicado_pct').value = opt.dataset.desconto;
-  document.getElementById('cobra_band').checked = opt.dataset.cobra === '1';
-  calcPreview();
-}
-
 // ── Preview de cálculo ────────────────────────────────────────────────────────
 function v(name) { return parseFloat(document.querySelector(`[name="${name}"]`)?.value) || 0; }
 function bv(name) { return document.getElementById(name)?.checked || false; }
@@ -664,9 +589,9 @@ function calcPreview() {
   // --- tarifa_b_cons ---
   const b_val = v('b_amarela_cons_valor') + v('b_verm_p1_cons_valor') + v('b_verm_p2_cons_valor');
   const b_kwh = v('b_amarela_cons_kwh') + v('b_verm_p1_cons_kwh') + v('b_verm_p2_cons_kwh');
-  if (grupo === 'GER' || grupo === 'EQT' || grupo === 'CEMIG')
+  if (grupo === 'GER' || grupo === 'EQT' || grupo === 'CEMIG' || grupo === 'ENERGISA')
     tb_cons = b_kwh ? b_val / b_kwh : 0;
-  else if (grupo === 'ENERGISA' || grupo === 'BRASILIA')
+  else if (grupo === 'BRASILIA')
     tb_cons = res_kwh ? b_val / res_kwh : 0;
   else if (grupo === 'LIGHT')
     tb_cons = consumo ? b_val / consumo : 0;
@@ -688,25 +613,26 @@ function calcPreview() {
     const di = v('desconto_injecao');
     tc = tc_tarifas > 0 ? tc_tarifas : (inj ? di / inj : 0);
   }
-  else if (['EQT','CEMIG'].includes(grupo)) {
-    const scee = v('scee_consumo') + v('scee_injecao') + v('scee_comp_nao_isento')
-               + v('scee_beneficio_bruto') + v('scee_beneficio_liquido');
+  else if (grupo === 'EQT') {
+    const g1 = v('scee_consumo') + v('scee_injecao');
+    const g2 = v('scee_comp_nao_isento') + v('scee_beneficio_bruto') + v('scee_beneficio_liquido');
+    tc = inj ? (td * inj - g1 - g2) / inj : 0;
+  } else if (grupo === 'CEMIG') {
+    const scee = v('scee_consumo') + v('scee_injecao') + v('scee_comp_nao_isento');
     tc = consumo ? (consumo * td - scee) / consumo : 0;
   } else if (['ENERGISA','BRASILIA'].includes(grupo)) {
     tc = v('tarifa_compensada_input') - (inj ? v('ajuste_gd2') / inj : 0);
   } else if (grupo === 'LIGHT') {
     const td_calc = td - tb_cons;
-    const sum_tusd = v('tusd_injetada_gd') + v('te_injetada_gd') + v('tusd_fornecida_gd') + v('te_fornecida_gd');
-    tc = inj ? (inj * td_calc - sum_tusd) / inj : 0;
+    const fornecida_gd = v('tusd_fornecida_gd') + v('te_fornecida_gd');
+    const injetada_gd  = v('tusd_injetada_gd')  + v('te_injetada_gd');
+    tc = td_calc - (fornecida_gd - injetada_gd);
     td = td_calc;
   }
 
   // --- tarifa_bruta_inj ---
   const desc_usar = ['GER','EQT','ENERGISA','LIGHT'].includes(grupo) ? da : db;
-  // ENERGISA: bandeira sempre incluída no tarifa_bruta (cobra_band não afeta o cálculo tarifário)
-  const tb_bruta = (grupo === 'ENERGISA')
-    ? (td + tb_cons) * (1 - desc_usar)
-    : (cobra ? td + tb_cons : td) * (1 - desc_usar);
+  const tb_bruta = (cobra ? td + tb_cons : td) * (1 - desc_usar);
 
   // --- conc_com / conc_sem ---
   let conc_com, conc_sem;
@@ -730,7 +656,7 @@ function calcPreview() {
   const tem_ref = !['NEOENERGIA','CEMIG','BRASILIA'].includes(grupo);
 
   document.getElementById('preview-card').style.display = '';
-  document.getElementById('res-td').textContent   = 'R$ ' + (grupo === 'LIGHT' ? (td + tb_cons) : td).toFixed(4);
+  document.getElementById('res-td').textContent   = 'R$ ' + td.toFixed(4);
   document.getElementById('res-tc').textContent   = 'R$ ' + tc.toFixed(4);
   document.getElementById('res-tg').textContent   = 'R$ ' + tg.toFixed(4);
   document.getElementById('res-dr').textContent   = (dr * 100).toFixed(2) + '%';
@@ -784,12 +710,6 @@ document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', ca
 document.getElementById('cobra_band').addEventListener('change', calcPreview);
 if (grupoAtual) aplicarGrupo(grupoAtual);
 
-const selCliente = document.getElementById('cliente_id');
-if (selCliente.value === 'new') {
-  // Vindo de upload: abre painel novo cliente e aplica grupo extraído
-  onClienteChange('new');
-} else if (selCliente.value) {
-  calcPreview();
-}
+calcPreview();
 </script>
 {% endblock %}

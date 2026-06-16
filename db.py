@@ -11,24 +11,18 @@ os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 GRUPOS = ["GER", "EQT", "NEOENERGIA", "ENERGISA", "LIGHT", "CEMIG", "BRASILIA"]
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS clientes (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    usina_id      TEXT NOT NULL,
-    distribuidora TEXT NOT NULL,
-    instalacao    TEXT NOT NULL UNIQUE,
-    grupo         TEXT NOT NULL,
-    desconto_base REAL NOT NULL,
-    cobra_band    INTEGER NOT NULL DEFAULT 0,
-    gd            INTEGER NOT NULL DEFAULT 1,
-    tipo_gd       TEXT NOT NULL DEFAULT 'GD1',
-    modalidade    TEXT NOT NULL DEFAULT 'Geração Compartilhada',
-    obs           TEXT,
-    criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS faturas (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente_id              INTEGER NOT NULL REFERENCES clientes(id),
+    cliente_id              INTEGER,   -- legado; nullable
+
+    -- identificação inline (sem depender de clientes)
+    usina_id                TEXT,
+    distribuidora           TEXT,
+    instalacao              TEXT,
+    grupo                   TEXT,
+    tipo_gd                 TEXT DEFAULT 'GD1',
+    modalidade              TEXT DEFAULT 'Geração Compartilhada',
+
     mes_referencia          TEXT NOT NULL,
 
     -- comuns a todos os grupos
@@ -68,7 +62,7 @@ CREATE TABLE IF NOT EXISTS faturas (
     tusd_fornecida_gd       REAL,
     te_fornecida_gd         REAL,
 
-    -- LIGHT: impostos (necessários para calcular valor_geracao)
+    -- LIGHT: impostos
     aliquota_icms           REAL,
     valor_icms              REAL,
     aliquota_pis            REAL,
@@ -76,7 +70,7 @@ CREATE TABLE IF NOT EXISTS faturas (
     aliquota_cofins         REAL,
     valor_cofins            REAL,
 
-    -- Bandeira consumo: todos os grupos têm pelo menos os valores
+    -- Bandeira consumo
     b_amarela_cons_kwh      REAL DEFAULT 0,
     b_amarela_cons_valor    REAL DEFAULT 0,
     b_verm_p1_cons_kwh      REAL DEFAULT 0,
@@ -84,7 +78,7 @@ CREATE TABLE IF NOT EXISTS faturas (
     b_verm_p2_cons_kwh      REAL DEFAULT 0,
     b_verm_p2_cons_valor    REAL DEFAULT 0,
 
-    -- Bandeira injeção: apenas GER, EQT, CEMIG
+    -- Bandeira injeção
     b_amarela_inj_kwh       REAL DEFAULT 0,
     b_amarela_inj_valor     REAL DEFAULT 0,
     b_verm_p1_inj_kwh       REAL DEFAULT 0,
@@ -103,17 +97,40 @@ CREATE TABLE IF NOT EXISTS faturas (
     status_pagamento        TEXT DEFAULT 'pendente',
     data_pagamento          DATE,
     obs                     TEXT,
-    criado_em               DATETIME DEFAULT CURRENT_TIMESTAMP,
+    criado_em               DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-    UNIQUE(cliente_id, mes_referencia)
+CREATE TABLE IF NOT EXISTS clientes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    usina_id      TEXT NOT NULL,
+    distribuidora TEXT NOT NULL,
+    instalacao    TEXT NOT NULL UNIQUE,
+    grupo         TEXT NOT NULL,
+    desconto_base REAL NOT NULL,
+    cobra_band    INTEGER NOT NULL DEFAULT 0,
+    gd            INTEGER NOT NULL DEFAULT 1,
+    tipo_gd       TEXT NOT NULL DEFAULT 'GD1',
+    modalidade    TEXT NOT NULL DEFAULT 'Geração Compartilhada',
+    obs           TEXT,
+    criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 """
+
+# Colunas inline a adicionar via migração se não existirem
+_INLINE_COLS = [
+    ("usina_id",    "TEXT"),
+    ("distribuidora","TEXT"),
+    ("instalacao",  "TEXT"),
+    ("grupo",       "TEXT"),
+    ("tipo_gd",     "TEXT DEFAULT 'GD1'"),
+    ("modalidade",  "TEXT DEFAULT 'Geração Compartilhada'"),
+]
 
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA foreign_keys = OFF")   # desligado pois cliente_id agora é opcional
     return conn
 
 
@@ -260,6 +277,15 @@ def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
         init_descontos_padrao()
+
+        # Migração: adiciona colunas inline à tabela faturas
+        for col, defn in _INLINE_COLS:
+            try:
+                conn.execute(f"ALTER TABLE faturas ADD COLUMN {col} {defn}")
+            except Exception:
+                pass
+
+        # Migração: colunas legadas da tabela clientes
         for col, defn in [
             ("tipo_gd",    "TEXT NOT NULL DEFAULT 'GD1'"),
             ("modalidade", "TEXT NOT NULL DEFAULT 'Geração Compartilhada'"),
@@ -268,58 +294,77 @@ def init_db():
                 conn.execute(f"ALTER TABLE clientes ADD COLUMN {col} {defn}")
             except Exception:
                 pass
-        # Normaliza nomes longos de distribuidora para nome curto da lista
-        rows = conn.execute("SELECT id, distribuidora FROM clientes").fetchall()
+
+        # Migração: popula campos inline nas faturas que ainda têm cliente_id
+        conn.execute("""
+            UPDATE faturas SET
+                usina_id      = (SELECT usina_id      FROM clientes WHERE id = faturas.cliente_id),
+                distribuidora = (SELECT distribuidora  FROM clientes WHERE id = faturas.cliente_id),
+                instalacao    = (SELECT instalacao     FROM clientes WHERE id = faturas.cliente_id),
+                grupo         = (SELECT grupo          FROM clientes WHERE id = faturas.cliente_id),
+                tipo_gd       = (SELECT tipo_gd        FROM clientes WHERE id = faturas.cliente_id),
+                modalidade    = (SELECT modalidade     FROM clientes WHERE id = faturas.cliente_id)
+            WHERE cliente_id IS NOT NULL
+              AND (distribuidora IS NULL OR distribuidora = '')
+        """)
+
+        # Normaliza distribuidoras nas faturas
+        rows = conn.execute("SELECT id, distribuidora FROM faturas WHERE distribuidora IS NOT NULL").fetchall()
         for row in rows:
             curto = normalizar_distribuidora(row["distribuidora"])
             if curto != row["distribuidora"]:
-                conn.execute("UPDATE clientes SET distribuidora=? WHERE id=?",
-                             (curto, row["id"]))
+                conn.execute("UPDATE faturas SET distribuidora=? WHERE id=?", (curto, row["id"]))
 
 
-def get_clientes():
-    with get_conn() as conn:
-        return conn.execute(
-            "SELECT * FROM clientes ORDER BY grupo, distribuidora, instalacao"
-        ).fetchall()
-
-
-def get_cliente(id):
-    with get_conn() as conn:
-        return conn.execute("SELECT * FROM clientes WHERE id=?", (id,)).fetchone()
-
-
-def salvar_cliente(data, id=None):
-    cols = ["usina_id","distribuidora","instalacao","grupo","desconto_base","cobra_band","gd","tipo_gd","modalidade","obs"]
-    vals = [data.get(c) for c in cols]
-    with get_conn() as conn:
-        if id:
-            conn.execute(f"UPDATE clientes SET {', '.join(f'{c}=?' for c in cols)} WHERE id=?", vals + [id])
-        else:
-            cur = conn.execute(f"INSERT INTO clientes ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})", vals)
-            return cur.lastrowid
+# Colunas salvas/lidas no formulário
+_INPUT_COLS = [
+    "cliente_id",
+    "usina_id", "distribuidora", "instalacao", "grupo", "tipo_gd", "modalidade",
+    "mes_referencia", "valor_concessionaria",
+    "consumo_kwh", "injetada_kwh", "desconto_base", "desconto_aplicado", "cobra_band",
+    "te_consumo", "tusd_consumo", "te_compensada", "tusd_compensada",
+    "tusd_distribuidora", "te_distribuidora", "desconto_injecao",
+    "tarifa_distribuidora_input", "tarifa_compensada_input", "ajuste_gd2",
+    "scee_consumo", "scee_injecao", "scee_comp_nao_isento",
+    "scee_beneficio_bruto", "scee_beneficio_liquido",
+    "tusd_injetada_gd", "te_injetada_gd", "tusd_fornecida_gd", "te_fornecida_gd",
+    "aliquota_icms", "valor_icms", "aliquota_pis", "valor_pis", "aliquota_cofins", "valor_cofins",
+    "b_amarela_cons_kwh", "b_amarela_cons_valor",
+    "b_verm_p1_cons_kwh", "b_verm_p1_cons_valor",
+    "b_verm_p2_cons_kwh", "b_verm_p2_cons_valor",
+    "b_amarela_inj_kwh", "b_amarela_inj_valor",
+    "b_verm_p1_inj_kwh", "b_verm_p1_inj_valor",
+    "b_verm_p2_inj_kwh", "b_verm_p2_inj_valor",
+    "tarifa_distribuidora", "tarifa_compensada", "tarifa_geracao", "desconto_real", "desconto_ref",
+    "status_pagamento", "data_pagamento", "obs",
+]
 
 
 def get_faturas_mes(mes):
     with get_conn() as conn:
-        return conn.execute("""
-            SELECT f.*, c.usina_id, c.distribuidora, c.instalacao, c.grupo, c.tipo_gd, c.modalidade
-            FROM faturas f JOIN clientes c ON c.id=f.cliente_id
-            WHERE f.mes_referencia=?
-            ORDER BY f.criado_em DESC
-        """, (mes,)).fetchall()
+        return conn.execute(
+            "SELECT * FROM faturas WHERE mes_referencia=? ORDER BY criado_em DESC",
+            (mes,)
+        ).fetchall()
 
 
-def get_faturas_cliente(cliente_id):
+def get_faturas_instalacao(instalacao):
     with get_conn() as conn:
-        return conn.execute("""
-            SELECT f.*, c.usina_id, c.distribuidora, c.instalacao, c.grupo, c.tipo_gd, c.modalidade
-            FROM faturas f JOIN clientes c ON c.id=f.cliente_id
-            WHERE f.cliente_id=?
-            ORDER BY f.mes_referencia DESC
-        """, (cliente_id,)).fetchall()
+        return conn.execute(
+            "SELECT * FROM faturas WHERE instalacao=? ORDER BY mes_referencia DESC",
+            (instalacao,)
+        ).fetchall()
 
 
+def get_fatura_por_instalacao_mes(instalacao, mes_referencia):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM faturas WHERE instalacao=? AND mes_referencia=?",
+            (instalacao, mes_referencia)
+        ).fetchone()
+
+
+# legado: mantido para compatibilidade com código antigo
 def get_fatura_por_cliente_mes(cliente_id, mes_referencia):
     with get_conn() as conn:
         return conn.execute(
@@ -330,54 +375,22 @@ def get_fatura_por_cliente_mes(cliente_id, mes_referencia):
 
 def get_fatura(id):
     with get_conn() as conn:
-        return conn.execute("""
-            SELECT f.*, c.usina_id, c.distribuidora, c.instalacao, c.grupo,
-                   c.tipo_gd, c.modalidade,
-                   c.desconto_base as cliente_desconto_base,
-                   c.cobra_band as cliente_cobra_band
-            FROM faturas f JOIN clientes c ON c.id=f.cliente_id
-            WHERE f.id=?
-        """, (id,)).fetchone()
-
-
-# Todas as colunas de entrada que podem vir do formulário
-_INPUT_COLS = [
-    "cliente_id","mes_referencia","valor_concessionaria",
-    "consumo_kwh","injetada_kwh","desconto_base","desconto_aplicado","cobra_band",
-    "te_consumo","tusd_consumo","te_compensada","tusd_compensada",
-    "tusd_distribuidora","te_distribuidora","desconto_injecao",
-    "tarifa_distribuidora_input","tarifa_compensada_input","ajuste_gd2",
-    "scee_consumo","scee_injecao","scee_comp_nao_isento",
-    "scee_beneficio_bruto","scee_beneficio_liquido",
-    "tusd_injetada_gd","te_injetada_gd","tusd_fornecida_gd","te_fornecida_gd",
-    "aliquota_icms","valor_icms","aliquota_pis","valor_pis","aliquota_cofins","valor_cofins",
-    "b_amarela_cons_kwh","b_amarela_cons_valor",
-    "b_verm_p1_cons_kwh","b_verm_p1_cons_valor",
-    "b_verm_p2_cons_kwh","b_verm_p2_cons_valor",
-    "b_amarela_inj_kwh","b_amarela_inj_valor",
-    "b_verm_p1_inj_kwh","b_verm_p1_inj_valor",
-    "b_verm_p2_inj_kwh","b_verm_p2_inj_valor",
-    "tarifa_distribuidora","tarifa_compensada","tarifa_geracao","desconto_real","desconto_ref",
-    "status_pagamento","data_pagamento","obs",
-]
+        return conn.execute("SELECT * FROM faturas WHERE id=?", (id,)).fetchone()
 
 
 def salvar_fatura(data, id=None):
-    cols = [c for c in _INPUT_COLS if c != "cliente_id" or not id]
-    if id:
-        cols = [c for c in _INPUT_COLS if c not in ("cliente_id",)]
+    cols = _INPUT_COLS
     vals = [data.get(c) for c in cols]
     with get_conn() as conn:
         if id:
-            sets = ", ".join(f"{c}=?" for c in cols)
-            conn.execute(f"UPDATE faturas SET {sets} WHERE id=?", vals + [id])
+            sets = ", ".join(f"{c}=?" for c in cols if c != "cliente_id")
+            update_vals = [data.get(c) for c in cols if c != "cliente_id"]
+            conn.execute(f"UPDATE faturas SET {sets} WHERE id=?", update_vals + [id])
             return id
         else:
-            all_cols = _INPUT_COLS
-            all_vals = [data.get(c) for c in all_cols]
             cur = conn.execute(
-                f"INSERT INTO faturas ({','.join(all_cols)}) VALUES ({','.join(['?']*len(all_cols))})",
-                all_vals
+                f"INSERT INTO faturas ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})",
+                vals
             )
             return cur.lastrowid
 
@@ -395,14 +408,22 @@ def deletar_fatura(id):
         conn.execute("DELETE FROM faturas WHERE id=?", (id,))
 
 
-def deletar_cliente(id):
+def get_distribuidoras():
     with get_conn() as conn:
-        conn.execute("DELETE FROM faturas WHERE cliente_id=?", (id,))
-        conn.execute("DELETE FROM clientes WHERE id=?", (id,))
+        rows = conn.execute(
+            "SELECT DISTINCT distribuidora FROM faturas WHERE distribuidora IS NOT NULL ORDER BY distribuidora"
+        ).fetchall()
+        return [r["distribuidora"] for r in rows]
+
+
+def get_todas_faturas():
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM faturas ORDER BY mes_referencia DESC, grupo, distribuidora, instalacao"
+        ).fetchall()
 
 
 def init_tarifas_gerador():
-    """Cria tabela tarifas_gerador se não existir."""
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS tarifas_gerador (
@@ -428,7 +449,6 @@ def salvar_tarifa_gerador(data):
             "desconto_gd","tarifa_compensada","tarifa_distribuidora","tarifa_geracao","desagio","t_gerador"]
     vals = [data.get(c) for c in cols]
     with get_conn() as conn:
-        # Garantir coluna existe (migração)
         try:
             conn.execute("ALTER TABLE tarifas_gerador ADD COLUMN tarifa_geracao REAL")
         except Exception:
@@ -464,20 +484,3 @@ def get_tarifas_gerador(distribuidora=None, mes=None):
 def deletar_tarifa_gerador(id):
     with get_conn() as conn:
         conn.execute("DELETE FROM tarifas_gerador WHERE id=?", (id,))
-
-
-def get_todas_faturas():
-    with get_conn() as conn:
-        return conn.execute("""
-            SELECT f.*, c.usina_id, c.distribuidora, c.instalacao, c.grupo, c.tipo_gd, c.modalidade
-            FROM faturas f JOIN clientes c ON c.id=f.cliente_id
-            ORDER BY f.mes_referencia DESC, c.grupo, c.distribuidora, c.instalacao
-        """).fetchall()
-
-
-def get_distribuidoras():
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT distribuidora FROM clientes ORDER BY distribuidora"
-        ).fetchall()
-        return [r["distribuidora"] for r in rows]

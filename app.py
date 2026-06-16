@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 import io
 import json
 import threading
+import uuid
 from datetime import datetime
 from pathlib import Path
 import openpyxl
@@ -24,6 +25,25 @@ db.init_db()
 _DATA_DIR     = Path(db.DB_PATH).parent          # volume /data no Railway, pasta local caso contrário
 FEEDBACK_FILE = _DATA_DIR / "feedback_extracao.jsonl"
 DEBUG_LOG     = _DATA_DIR / "debug_feedback.log"
+_EXTR_DIR     = _DATA_DIR / "extraidos"
+_EXTR_DIR.mkdir(exist_ok=True)
+
+
+def _salvar_extraido(dados: dict) -> str:
+    token = uuid.uuid4().hex
+    (_EXTR_DIR / f"{token}.json").write_text(
+        json.dumps(dados, ensure_ascii=False), encoding="utf-8"
+    )
+    return token
+
+
+def _carregar_extraido(token: str) -> dict | None:
+    p = _EXTR_DIR / f"{token}.json"
+    if not p.exists():
+        return None
+    dados = json.loads(p.read_text(encoding="utf-8"))
+    p.unlink()   # usa uma vez só
+    return dados
 
 
 def _log_debug(msg: str):
@@ -103,12 +123,18 @@ def _float(v, default=None):
         return default
 
 
-def _parse_form(form, cliente):
+def _parse_form(form):
     """Extrai e converte todos os campos do formulário."""
     f = form
     cobra = 1 if f.get("cobra_band") else 0
     d = {
-        "cliente_id":               0,  # definido pelo chamador
+        "cliente_id":               None,
+        "usina_id":                 f.get("usina_id", ""),
+        "distribuidora":            f.get("distribuidora", ""),
+        "instalacao":               f.get("instalacao", ""),
+        "grupo":                    f.get("grupo", ""),
+        "tipo_gd":                  f.get("tipo_gd", "GD1"),
+        "modalidade":               f.get("modalidade", "Geração Compartilhada"),
         "mes_referencia":           f["mes_referencia"][:7] + "-01",
         "valor_concessionaria":     _float(f.get("valor_concessionaria")),
         "consumo_kwh":              _float(f.get("consumo_kwh")),
@@ -191,90 +217,20 @@ def index():
                            distribuidoras=db.get_distribuidoras())
 
 
-# ── CLIENTES ─────────────────────────────────────────────────────────────────
-
-@app.route("/clientes")
-def clientes():
-    return render_template("clientes.html", clientes=db.get_clientes(), grupos=db.GRUPOS)
-
-
-@app.route("/clientes/novo", methods=["GET", "POST"])
-@app.route("/clientes/<int:id>/editar", methods=["GET", "POST"])
-def form_cliente(id=None):
-    cliente = db.get_cliente(id) if id else None
-    if request.method == "POST":
-        data = {
-            "usina_id":     request.form["usina_id"],
-            "distribuidora": request.form["distribuidora"],
-            "instalacao":   request.form["instalacao"],
-            "grupo":        request.form["grupo"],
-            "desconto_base": float(request.form["desconto_base"]) / 100,
-            "cobra_band":   1 if request.form.get("cobra_band") else 0,
-            "gd":           int(request.form.get("gd", 1)),
-            "tipo_gd":      request.form.get("tipo_gd", "GD1"),
-            "modalidade":   request.form.get("modalidade", "Geração Compartilhada"),
-            "obs":          request.form.get("obs", ""),
-        }
-        try:
-            db.salvar_cliente(data, id)
-            flash("Cliente salvo.", "success")
-            return redirect(url_for("clientes"))
-        except Exception as e:
-            flash(f"Erro: {e}", "danger")
-    return render_template("form_cliente.html", cliente=cliente, grupos=db.GRUPOS,
-                           concessionarias=CONCESSIONARIAS)
-
-
-@app.route("/clientes/<int:id>/deletar", methods=["POST"])
-def deletar_cliente(id):
-    db.deletar_cliente(id)
-    flash("Cliente removido.", "warning")
-    return redirect(url_for("clientes"))
-
-
 # ── FATURAS ───────────────────────────────────────────────────────────────────
 
 @app.route("/faturas/nova", methods=["GET", "POST"])
 @app.route("/faturas/<int:id>/editar", methods=["GET", "POST"])
 def form_fatura(id=None):
-    fatura   = db.get_fatura(id) if id else None
-    clientes = db.get_clientes()
+    fatura = db.get_fatura(id) if id else None
 
     if request.method == "POST":
-        cliente_id_raw = request.form.get("cliente_id", "")
+        data  = _parse_form(request.form)
+        grupo = data["grupo"]
 
-        if cliente_id_raw == "new":
-            novo = {
-                "usina_id":      request.form.get("novo_usina_id", ""),
-                "distribuidora": request.form.get("novo_distribuidora", ""),
-                "instalacao":    request.form.get("novo_instalacao", ""),
-                "grupo":         request.form.get("novo_grupo", ""),
-                "desconto_base": _float(request.form.get("novo_desconto_base"), 10) / 100,
-                "cobra_band":    1 if request.form.get("novo_cobra_band") else 0,
-                "gd":            1,
-                "tipo_gd":       request.form.get("novo_tipo_gd", "GD1"),
-                "modalidade":    request.form.get("novo_modalidade", "Geração Compartilhada"),
-                "obs":           "",
-            }
-            try:
-                cliente_id = db.salvar_cliente(novo)
-                grupo      = novo["grupo"]
-                cliente    = db.get_cliente(cliente_id)
-            except Exception as e:
-                flash(f"Erro ao criar cliente: {e}", "danger")
-                return render_template("form_fatura.html", fatura=fatura, clientes=clientes,
-                                       mes_pre=mes_atual(), cliente_pre=None, grupo_pre=None,
-                                       campos_grupo=CAMPOS_GRUPO, grupos=db.GRUPOS,
-                                       concessionarias=CONCESSIONARIAS)
-        else:
-            cliente_id = int(cliente_id_raw)
-            cliente    = db.get_cliente(cliente_id)
-            grupo      = cliente["grupo"]
+        from concessionarias import normalizar_distribuidora
+        data["distribuidora"] = normalizar_distribuidora(data["distribuidora"])
 
-        data = _parse_form(request.form, cliente)
-        data["cliente_id"] = cliente_id
-
-        # Feedback: compara extração original vs valores corrigidos pelo usuário
         extraido_json = request.form.get("_extraido_json")
         _log_debug(f"_extraido_json presente={bool(extraido_json)} tamanho={len(extraido_json) if extraido_json else 0}")
         if extraido_json:
@@ -289,51 +245,35 @@ def form_fatura(id=None):
         try:
             resultado = calcular(grupo, data)
             data.update(resultado)
-            try:
-                db.salvar_fatura(data, id)
-            except Exception as e_save:
-                if "UNIQUE constraint" in str(e_save) and not id:
-                    # Já existe fatura para esse cliente+mês (ex: importada do histórico)
-                    # → encontra e atualiza no lugar de criar
-                    existente = db.get_fatura_por_cliente_mes(
-                        data["cliente_id"], data["mes_referencia"]
-                    )
-                    if existente:
-                        db.salvar_fatura(data, existente["id"])
-                        flash("Fatura existente atualizada com os novos dados.", "success")
-                        return redirect(url_for("index", mes=data["mes_referencia"]))
-                raise e_save
+            if not id:
+                existente = db.get_fatura_por_instalacao_mes(
+                    data["instalacao"], data["mes_referencia"]
+                )
+                if existente:
+                    db.salvar_fatura(data, existente["id"])
+                    flash("Fatura existente atualizada.", "success")
+                    return redirect(url_for("index", mes=data["mes_referencia"]))
+            db.salvar_fatura(data, id)
             flash("Fatura salva.", "success")
             return redirect(url_for("index", mes=data["mes_referencia"]))
         except Exception as e:
             flash(f"Erro no cálculo: {e}", "danger")
 
-    from flask import session
-    extraido    = session.pop("extraido", None)
-    _log_debug(f"GET form_fatura: extraido={'SIM keys='+str(list(extraido.keys())) if extraido else 'NAO'}")
-    mes_pre     = request.args.get("mes", mes_atual())
-    cliente_pre = request.args.get("cliente_id")
-    grupo_pre   = None
+    token    = request.args.get("_extr")
+    extraido = _carregar_extraido(token) if token else None
+    _log_debug(f"GET form_fatura: token={token} extraido={'SIM keys='+str(list(extraido.keys())) if extraido else 'NAO'}")
+    mes_pre   = request.args.get("mes", mes_atual())
+    grupo_pre = None
 
     if extraido:
-        mes_pre     = (extraido.get("mes_referencia") or mes_pre[:7]) + "-01"
-        if extraido.get("_cliente_id"):
-            cliente_pre = str(extraido["_cliente_id"])
-        else:
-            cliente_pre = "new"   # abre painel novo cliente automaticamente
+        mes_pre   = (extraido.get("mes_referencia") or mes_pre[:7]) + "-01"
         grupo_pre = extraido.get("_grupo") or extraido.get("grupo")
-
-    if cliente_pre and cliente_pre != "new":
-        c = db.get_cliente(int(cliente_pre))
-        grupo_pre = grupo_pre or (c["grupo"] if c else None)
     elif fatura:
         grupo_pre = fatura["grupo"]
 
     return render_template("form_fatura.html",
                            fatura=fatura,
-                           clientes=clientes,
                            mes_pre=mes_pre,
-                           cliente_pre=cliente_pre,
                            grupo_pre=grupo_pre,
                            campos_grupo=CAMPOS_GRUPO,
                            grupos=db.GRUPOS,
@@ -364,22 +304,17 @@ def upload_fatura():
             dados = extrair_fatura(arq.read())
             # normaliza nome da distribuidora para o nome curto da lista
             dados["distribuidora"] = normalizar_distribuidora(dados.get("distribuidora", ""))
-            # tenta vincular cliente existente pela instalação
             instalacao = str(dados.get("instalacao", "")).strip()
             if instalacao:
-                for c in db.get_clientes():
-                    if str(c["instalacao"]).strip() == instalacao:
-                        dados["_cliente_id"] = c["id"]
-                        dados["_grupo"]      = c["grupo"]
-                        break
-            # grupo vem também direto da extração
+                f_existente = db.get_faturas_instalacao(instalacao)
+                if f_existente:
+                    dados["_grupo"] = dados.get("_grupo") or f_existente[0].get("grupo")
             if not dados.get("_grupo") and dados.get("grupo"):
                 dados["_grupo"] = dados["grupo"]
-            from flask import session
-            session["extraido"] = dados
-            _log_debug(f"UPLOAD OK: dist={dados.get('distribuidora')} inst={dados.get('instalacao')} chaves={list(dados.keys())}")
+            token = _salvar_extraido(dados)
+            _log_debug(f"UPLOAD OK: dist={dados.get('distribuidora')} inst={dados.get('instalacao')} chaves={list(dados.keys())} token={token}")
             flash("✅ Dados extraídos! Revise e salve.", "success")
-            return redirect(url_for("form_fatura"))
+            return redirect(url_for("form_fatura", _extr=token))
         except ValueError as e:
             flash(str(e), "danger")
         except Exception as e:
@@ -389,27 +324,10 @@ def upload_fatura():
 
 # ── HISTÓRICO ────────────────────────────────────────────────────────────────
 
-@app.route("/historico/<int:cliente_id>")
-def historico(cliente_id):
-    cliente = db.get_cliente(cliente_id)
-    faturas = db.get_faturas_cliente(cliente_id)
-    return render_template("historico.html", cliente=cliente, faturas=faturas)
-
-
-# ── API: grupo do cliente (para atualizar form via JS) ───────────────────────
-
-@app.route("/api/cliente/<int:id>/grupo")
-def api_grupo(id):
-    from flask import jsonify
-    c = db.get_cliente(id)
-    if not c:
-        return jsonify({}), 404
-    return jsonify({
-        "grupo": c["grupo"],
-        "desconto_base": c["desconto_base"],
-        "cobra_band": c["cobra_band"],
-        "campos": CAMPOS_GRUPO.get(c["grupo"], {}),
-    })
+@app.route("/historico/<instalacao>")
+def historico(instalacao):
+    faturas = db.get_faturas_instalacao(instalacao)
+    return render_template("historico.html", instalacao=instalacao, faturas=faturas)
 
 
 # ── EXPORTAR EXCEL ───────────────────────────────────────────────────────────
@@ -597,67 +515,63 @@ def api_tarifa_gerador():
     # Mês pode chegar como YYYY-MM; no banco está YYYY-MM-01
     mes_db = mes[:7] + "-01"
 
-    cond   = ["c.distribuidora = ?", "f.mes_referencia = ?"]
+    cond   = ["f.distribuidora = ?", "f.mes_referencia = ?"]
     params = [dist, mes_db]
 
     if tipo_gd:
-        cond.append("c.tipo_gd = ?")
+        cond.append("f.tipo_gd = ?")
         params.append(tipo_gd)
 
     if modal == "AC":
-        cond.append("c.modalidade = 'Autoconsumo'")
+        cond.append("f.modalidade = 'Autoconsumo'")
     elif modal == "GC":
-        cond.append("c.modalidade = 'Geração Compartilhada'")
+        cond.append("f.modalidade = 'Geração Compartilhada'")
 
     where = " AND ".join(cond)
 
     with db.get_conn() as conn:
-        # Tarifas: média de todos os registros do mês (incluindo HIST)
         row = conn.execute(f"""
             SELECT
                 AVG(f.tarifa_compensada)    AS tarifa_compensada,
                 AVG(f.tarifa_distribuidora) AS tarifa_distribuidora,
                 AVG(f.tarifa_geracao)       AS tarifa_geracao,
                 COUNT(*)                    AS total,
-                COUNT(CASE WHEN c.instalacao NOT LIKE 'HIST-%' THEN 1 END) AS total_reais
+                COUNT(CASE WHEN f.instalacao NOT LIKE 'HIST-%' THEN 1 END) AS total_reais
             FROM faturas f
-            JOIN clientes c ON c.id = f.cliente_id
             WHERE {where}
               AND f.tarifa_compensada    IS NOT NULL
               AND f.tarifa_distribuidora IS NOT NULL
         """, params).fetchone()
 
-        # Desconto GD: busca diretamente nos clientes reais cadastrados (ignora HIST e o mês)
-        cond_cli   = ["distribuidora = ?", "instalacao NOT LIKE 'HIST-%'"]
-        params_cli = [dist]
+        # Desconto GD: média das faturas reais da distribuidora
+        cond_desc   = ["distribuidora = ?", "instalacao NOT LIKE 'HIST-%'", "desconto_base IS NOT NULL"]
+        params_desc = [dist]
         if tipo_gd:
-            cond_cli.append("tipo_gd = ?")
-            params_cli.append(tipo_gd)
+            cond_desc.append("tipo_gd = ?")
+            params_desc.append(tipo_gd)
         if modal == "AC":
-            cond_cli.append("modalidade = 'Autoconsumo'")
+            cond_desc.append("modalidade = 'Autoconsumo'")
         elif modal == "GC":
-            cond_cli.append("modalidade = 'Geração Compartilhada'")
+            cond_desc.append("modalidade = 'Geração Compartilhada'")
 
         desc_row = conn.execute(
-            f"SELECT AVG(desconto_base) AS desconto_gd FROM clientes WHERE {' AND '.join(cond_cli)}",
-            params_cli
+            f"SELECT AVG(desconto_base) AS desconto_gd FROM faturas WHERE {' AND '.join(cond_desc)}",
+            params_desc
         ).fetchone()
 
-        # Detalhe de cada instalação encontrada
         registros = conn.execute(f"""
             SELECT
-                c.instalacao,
-                c.tipo_gd,
-                c.modalidade,
-                c.desconto_base,
+                f.instalacao,
+                f.tipo_gd,
+                f.modalidade,
+                f.desconto_base,
                 f.tarifa_compensada,
                 f.tarifa_distribuidora
             FROM faturas f
-            JOIN clientes c ON c.id = f.cliente_id
             WHERE {where}
               AND f.tarifa_compensada    IS NOT NULL
               AND f.tarifa_distribuidora IS NOT NULL
-            ORDER BY (c.instalacao LIKE 'HIST-%'), c.instalacao
+            ORDER BY (f.instalacao LIKE 'HIST-%'), f.instalacao
         """, params).fetchall()
 
     if not row or not row["total"]:
@@ -696,6 +610,14 @@ def api_tarifa_gerador():
 
 
 # Endpoint temporário para upload do banco de dados (protegido por token)
+@app.route("/admin/debug-log")
+def admin_debug_log():
+    try:
+        return DEBUG_LOG.read_text(encoding="utf-8", errors="replace")[-8000:], 200, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception as e:
+        return f"Erro: {e}", 500
+
+
 @app.route("/admin/upload-db", methods=["POST"])
 def upload_db():
     token = request.headers.get("X-Admin-Token", "")
