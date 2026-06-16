@@ -13,7 +13,7 @@
 
 <form method="post" id="formFatura">
   {% if extraido %}
-  <input type="hidden" name="_extraido_json" value="{{ extraido | tojson }}">
+  <textarea name="_extraido_json" style="display:none">{{ extraido | tojson }}</textarea>
   {% endif %}
   <div class="row g-4">
 
