@@ -651,18 +651,16 @@ def admin_recover_faturas():
         # conta registros
         old_count = conn.execute("SELECT COUNT(*) FROM faturas_old").fetchone()[0]
         cur_count = conn.execute("SELECT COUNT(*) FROM faturas").fetchone()[0]
-        if cur_count > 0:
-            return jsonify({"msg": "faturas já tem dados, não sobrescrevo", "faturas": cur_count, "faturas_old": old_count})
-        # copia
+        # copia (INSERT OR IGNORE para não duplicar IDs já presentes)
         old_info = conn.execute("PRAGMA table_info(faturas_old)").fetchall()
         new_info = conn.execute("PRAGMA table_info(faturas)").fetchall()
         old_cols = [c["name"] for c in old_info]
         new_cols = [c["name"] for c in new_info]
         shared = [c for c in old_cols if c in new_cols]
         cols_sql = ", ".join(shared)
-        conn.execute(f"INSERT INTO faturas ({cols_sql}) SELECT {cols_sql} FROM faturas_old")
+        conn.execute(f"INSERT OR IGNORE INTO faturas ({cols_sql}) SELECT {cols_sql} FROM faturas_old")
         recovered = conn.execute("SELECT COUNT(*) FROM faturas").fetchone()[0]
-        return jsonify({"ok": True, "recovered": recovered, "cols": shared})
+        return jsonify({"ok": True, "recovered": recovered, "faturas_old": old_count, "cols_copied": len(shared)})
 
 
 if __name__ == "__main__":
