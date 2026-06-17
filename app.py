@@ -638,6 +638,19 @@ def upload_db():
     return f"OK - {len(data)} bytes gravados em {_db.DB_PATH}", 200
 
 
+@app.route("/admin/sync-descontos", methods=["POST"])
+def admin_sync_descontos():
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if not expected or token != expected:
+        return "Unauthorized", 401
+    from flask import jsonify
+    db.init_descontos_padrao()
+    with db.get_conn() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM descontos_padrao").fetchone()[0]
+    return jsonify({"ok": True, "total": count})
+
+
 @app.route("/admin/recover-faturas", methods=["POST"])
 def admin_recover_faturas():
     token = request.headers.get("X-Admin-Token", "")
