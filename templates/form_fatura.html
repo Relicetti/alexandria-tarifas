@@ -721,6 +721,10 @@ document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', ca
 document.getElementById('cobra_band').addEventListener('change', calcPreview);
 if (grupoAtual) aplicarGrupo(grupoAtual);
 
+// Aplica desconto da distribuidora se campo já vier preenchido (ex: extração PDF)
+const _distrib = document.getElementById('distribuidora');
+if (_distrib && _distrib.value) onDistribChange(_distrib.value);
+
 calcPreview();
 </script>
 {% endblock %}
