@@ -518,11 +518,11 @@
 const GRUPO_BLOCOS = {
   GER:       { tarifa:'te_tusd', comp:'',            band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
   EQT:       { tarifa:'direto',  comp:'scee_5',       band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'5',   impostos:false },
-  NEOENERGIA:{ tarifa:'neo',     comp:'',            band:'val_inj', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
+  NEOENERGIA:{ tarifa:'neo',     comp:'',            band:'kwh', inj_kwh:true,  desc:'base',       scee:'',    impostos:false },
   ENERGISA:  { tarifa:'direto',  comp:'comp_ajuste', band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
-  LIGHT:     { tarifa:'direto',  comp:'light_tusd',  band:'val', inj_kwh:false, desc:'base_aplic', scee:'',    impostos:false },
+  LIGHT:     { tarifa:'direto',  comp:'light_tusd',  band:'kwh', inj_kwh:true,  desc:'base_aplic', scee:'',    impostos:false },
   CEMIG:     { tarifa:'direto',  comp:'scee_3',      band:'kwh', inj_kwh:true,  desc:'base',       scee:'3',   impostos:false },
-  BRASILIA:  { tarifa:'direto',  comp:'comp_ajuste', band:'val', inj_kwh:false, desc:'base',       scee:'',    impostos:false },
+  BRASILIA:  { tarifa:'direto',  comp:'comp_ajuste', band:'kwh', inj_kwh:true,  desc:'base',       scee:'',    impostos:false },
 };
 
 let grupoAtual = '{{ grupo_pre or "" }}';
@@ -589,21 +589,12 @@ function calcPreview() {
   // --- tarifa_b_cons ---
   const b_val = v('b_amarela_cons_valor') + v('b_verm_p1_cons_valor') + v('b_verm_p2_cons_valor');
   const b_kwh = v('b_amarela_cons_kwh') + v('b_verm_p1_cons_kwh') + v('b_verm_p2_cons_kwh');
-  if (grupo === 'GER' || grupo === 'EQT' || grupo === 'CEMIG' || grupo === 'ENERGISA')
-    tb_cons = b_kwh ? b_val / b_kwh : 0;
-  else if (grupo === 'BRASILIA')
-    tb_cons = res_kwh ? b_val / res_kwh : 0;
-  else if (grupo === 'LIGHT')
-    tb_cons = consumo ? b_val / consumo : 0;
-  else { // NEOENERGIA
-    tb_cons = consumo ? b_val / consumo : 0;
-  }
+  tb_cons = b_kwh ? b_val / b_kwh : 0;
 
   // --- tarifa_b_inj ---
   const bi_val = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
   const bi_kwh = v('b_amarela_inj_kwh') + v('b_verm_p1_inj_kwh') + v('b_verm_p2_inj_kwh');
-  if (['GER','EQT','CEMIG'].includes(grupo))
-    tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
+  tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
 
   // --- tarifa_comp ---
   if (grupo === 'GER')

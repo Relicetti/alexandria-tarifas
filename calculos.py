@@ -139,10 +139,8 @@ def calcular_NEOENERGIA(d):
     else:
         tarifa_comp = _g(d,'desconto_injecao') / inj if inj else 0.0
 
-    tb_cons = _b_cons_val_only(d, consumo)
-    bi_val  = (_g(d,'b_amarela_inj_valor') + _g(d,'b_verm_p1_inj_valor')
-               + _g(d,'b_verm_p2_inj_valor'))
-    tb_inj  = bi_val / inj if inj else 0.0
+    tb_cons = _b_cons_kwh(d)
+    tb_inj  = _b_inj_kwh(d)
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_C(consumo, tarifa_dist, tarifa_comp, inj, tb_cons, tb_inj)
@@ -183,10 +181,7 @@ def calcular_LIGHT(d):
     consumo_residual = consumo - inj
 
     tarifa_dist_input = _g(d, 'tarifa_distribuidora_input')
-    b_val = (_g(d,'b_amarela_cons_valor') + _g(d,'b_verm_p1_cons_valor')
-             + _g(d,'b_verm_p2_cons_valor'))
-    # LIGHT: bandeira extraída sobre consumo total (bruto) → divide por consumo
-    tb_cons = b_val / consumo if consumo else 0.0
+    tb_cons = _b_cons_kwh(d)
 
     # tarifa_dist líquida: input menos bandeira; tarifa_bruta reconstitui o input
     tarifa_dist = tarifa_dist_input - tb_cons
@@ -233,7 +228,7 @@ def calcular_BRASILIA(d):
     tarifa_dist = _g(d, 'tarifa_distribuidora_input')
     tarifa_comp = _g(d,'tarifa_compensada_input') - (_g(d,'ajuste_gd2') / inj if inj else 0)
 
-    tb_cons = _b_cons_val_only(d, consumo_residual)
+    tb_cons = _b_cons_kwh(d)
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_B(consumo_residual, tarifa_dist, tarifa_comp, inj, tb_cons)
