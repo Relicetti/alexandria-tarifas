@@ -44,7 +44,8 @@
               class="form-control" required
               list="lista-conc" placeholder="Digite para buscar..."
               autocomplete="off"
-              value="{{ fatura.distribuidora if fatura else (extraido.get('distribuidora', '') if extraido else '') }}">
+              value="{{ fatura.distribuidora if fatura else (extraido.get('distribuidora', '') if extraido else '') }}"
+              oninput="onDistribChange(this.value)">
             <datalist id="lista-conc">
               {% for c in concessionarias %}
                 <option value="{{ c.nome }}">{{ c.nome }} — {{ c.estado }}</option>
@@ -562,6 +563,25 @@ function aplicarGrupo(grupo) {
 function show(id, visible) {
   const el = document.getElementById(id);
   if (el) el.style.display = visible ? '' : 'none';
+}
+
+const CONC_DESCONTO = {
+  {% for c in concessionarias %}
+  "{{ c.nome }}": {{ '%.4f'|format(c.desconto) }},
+  {% endfor %}
+};
+
+function onDistribChange(val) {
+  {% if not fatura %}
+  const d = CONC_DESCONTO[val];
+  if (d !== undefined) {
+    const pct = (d * 100).toFixed(2);
+    document.getElementById('desconto_base_pct').value = pct;
+    const da = document.getElementById('desconto_aplicado_pct');
+    if (da) da.value = pct;
+    calcPreview();
+  }
+  {% endif %}
 }
 
 // ── Preview de cálculo ────────────────────────────────────────────────────────
