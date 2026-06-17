@@ -118,15 +118,27 @@
       <div class="card mb-3">
         <div class="card-header fw-semibold">Desconto</div>
         <div class="card-body row g-3">
+          {% if fatura %}
+            {% set desc_base_pct = '%.2f'|format((fatura.desconto_base or 0.1)*100) %}
+            {% set desc_aplic_pct = '%.2f'|format((fatura.desconto_aplicado or fatura.desconto_base or 0.1)*100) %}
+          {% else %}
+            {% set desc_base_pct = '10.00' %}
+            {% for c in concessionarias %}
+              {% if extraido and c.nome == extraido.get('distribuidora','') %}
+                {% set desc_base_pct = '%.2f'|format(c.desconto*100) %}
+              {% endif %}
+            {% endfor %}
+            {% set desc_aplic_pct = desc_base_pct %}
+          {% endif %}
           <div class="col-6">
             <label class="form-label">Desconto Base (%)</label>
             <input type="number" step="0.01" name="desconto_base_pct" id="desconto_base_pct" class="form-control calc" required
-              value="{{ '%.2f'|format((fatura.desconto_base or 0.1)*100) if fatura else '10.00' }}">
+              value="{{ desc_base_pct }}">
           </div>
           <div class="col-6" id="bloco_desc_aplicado">
             <label class="form-label">Desconto Aplicado (%)</label>
             <input type="number" step="0.01" name="desconto_aplicado_pct" id="desconto_aplicado_pct" class="form-control calc"
-              value="{{ '%.2f'|format((fatura.desconto_aplicado or 0.1)*100) if fatura else '10.00' }}">
+              value="{{ desc_aplic_pct }}">
           </div>
         </div>
       </div>
