@@ -205,7 +205,7 @@ def calcular_CEMIG(d):
 
     tarifa_dist = _g(d, 'tarifa_distribuidora_input')
     scee_sum = _g(d,'scee_consumo') + _g(d,'scee_injecao') + _g(d,'scee_comp_nao_isento')
-    tarifa_comp = (consumo * tarifa_dist - scee_sum) / consumo if consumo else 0.0
+    tarifa_comp = (inj * tarifa_dist - scee_sum) / inj if inj else 0.0
 
     tb_cons = _b_cons_kwh(d)
     tb_inj  = _b_inj_kwh(d)

@@ -642,7 +642,7 @@ function calcPreview() {
     tc = inj ? (td * inj - g1 - g2) / inj : 0;
   } else if (grupo === 'CEMIG') {
     const scee = v('scee_consumo') + v('scee_injecao') + v('scee_comp_nao_isento');
-    tc = consumo ? (consumo * td - scee) / consumo : 0;
+    tc = inj ? (inj * td - scee) / inj : 0;
   } else if (['ENERGISA','BRASILIA'].includes(grupo)) {
     tc = v('tarifa_compensada_input') - (inj ? v('ajuste_gd2') / inj : 0);
   } else if (grupo === 'LIGHT') {
