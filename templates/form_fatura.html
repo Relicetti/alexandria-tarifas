@@ -555,6 +555,8 @@ function aplicarGrupo(grupo) {
   show('bloco_scee_3',       cfg.comp === 'scee_3');
   show('bloco_comp_ajuste',  cfg.comp === 'comp_ajuste');
   show('bloco_light_tusd',   cfg.comp === 'light_tusd');
+  document.querySelectorAll('#bloco_scee_5 input').forEach(el => el.disabled = cfg.comp !== 'scee_5');
+  document.querySelectorAll('#bloco_scee_3 input').forEach(el => el.disabled = cfg.comp !== 'scee_3');
 
   // Bandeira
   show('bloco_band_kwh',     cfg.band === 'kwh');
@@ -597,7 +599,7 @@ function onDistribChange(val) {
 }
 
 // ── Preview de cálculo ────────────────────────────────────────────────────────
-function v(name) { return parseFloat(document.querySelector(`[name="${name}"]`)?.value) || 0; }
+function v(name) { return parseFloat(document.querySelector(`[name="${name}"]:not([disabled])`)?.value) || 0; }
 function bv(name) { return document.getElementById(name)?.checked || false; }
 
 function calcPreview() {
