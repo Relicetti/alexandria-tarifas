@@ -631,6 +631,7 @@ function calcPreview() {
   tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
 
   // --- tarifa_comp ---
+  console.log('calcPreview: grupo=', grupo, 'inj=', inj, 'consumo=', consumo);
   if (grupo === 'GER')
     tc = v('te_compensada') + v('tusd_compensada');
   else if (grupo === 'NEOENERGIA') {
