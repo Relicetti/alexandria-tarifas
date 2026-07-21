@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Análise Tarifária{% endblock %}
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Análise Tarifária</h4>
+  <a href="/" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Concessionária</label>
+        <select id="f-dist" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for d in distribuidoras %}
+          <option value="{{ d }}">{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small">GD</label>
+        <select id="f-gd" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="GD1">GD1</option>
+          <option value="GD2">GD2</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Usina</label>
+        <select id="f-usina" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for u in usinas %}
+          <option value="{{ u }}">{{ u }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary btn-sm" onclick="carregar()">Aplicar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gráfico -->
+<div class="card">
+  <div class="card-body">
+    <div id="sem-dados" class="text-center text-muted py-5" style="display:none">
+      Nenhum dado encontrado para os filtros selecionados.
+    </div>
+    <canvas id="grafico" style="max-height:420px"></canvas>
+  </div>
+</div>
+
+<!-- Tabela resumo -->
+<div class="card mt-3" id="card-tabela" style="display:none">
+  <div class="card-header py-2 small fw-semibold">Histórico</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Mês</th>
+          <th class="text-end">Tar. Geração</th>
+          <th class="text-end">Tar. Distribuidora</th>
+          <th class="text-end">Tar. Compensada</th>
+          <th class="text-end">Faturas</th>
+        </tr>
+      </thead>
+      <tbody id="tabela-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let chart = null;
+
+function fmt(v) { return v != null ? 'R$ ' + v.toFixed(6) : '—'; }
+function fmtMes(s) {
+  const [y, m] = s.split('-');
+  return m + '/' + y;
+}
+
+async function carregar() {
+  const dist  = document.getElementById('f-dist').value;
+  const gd    = document.getElementById('f-gd').value;
+  const usina = document.getElementById('f-usina').value;
+
+  const params = new URLSearchParams();
+  if (dist)  params.set('distribuidora', dist);
+  if (gd)    params.set('tipo_gd', gd);
+  if (usina) params.set('usina', usina);
+
+  const resp = await fetch('/api/analise-tarifaria?' + params);
+  const dados = await resp.json();
+
+  const semDados = document.getElementById('sem-dados');
+  const cardTabela = document.getElementById('card-tabela');
+
+  if (!Array.isArray(dados) || dados.length === 0) {
+    semDados.style.display = '';
+    cardTabela.style.display = 'none';
+    if (chart) { chart.destroy(); chart = null; }
+    document.getElementById('grafico').style.display = 'none';
+    return;
+  }
+
+  semDados.style.display = 'none';
+  document.getElementById('grafico').style.display = '';
+
+  const labels = dados.map(d => fmtMes(d.mes));
+  const tg     = dados.map(d => d.tarifa_geracao);
+  const td     = dados.map(d => d.tarifa_distribuidora);
+  const tc     = dados.map(d => d.tarifa_compensada);
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('grafico'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Tar. Geração',
+          data: tg,
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.08)',
+          borderWidth: 2,
+          pointRadius: 4,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Tar. Distribuidora',
+          data: td,
+          borderColor: '#dc3545',
+          backgroundColor: 'rgba(220,53,69,0.05)',
+          borderWidth: 1.5,
+          pointRadius: 3,
+          tension: 0.3,
+          borderDash: [5, 3],
+        },
+        {
+          label: 'Tar. Compensada',
+          data: tc,
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25,135,84,0.05)',
+          borderWidth: 1.5,
+          pointRadius: 3,
+          tension: 0.3,
+          borderDash: [3, 3],
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => ' ' + ctx.dataset.label + ': R$ ' + (ctx.parsed.y ?? '—').toFixed(6)
+          }
+        }
+      },
+      scales: {
+        y: {
+          title: { display: true, text: 'R$/kWh' },
+          ticks: { callback: v => 'R$ ' + v.toFixed(4) }
+        }
+      }
+    }
+  });
+
+  // Tabela
+  const tbody = document.getElementById('tabela-body');
+  tbody.innerHTML = dados.map(d => `
+    <tr>
+      <td>${fmtMes(d.mes)}</td>
+      <td class="text-end fw-semibold text-primary">${fmt(d.tarifa_geracao)}</td>
+      <td class="text-end">${fmt(d.tarifa_distribuidora)}</td>
+      <td class="text-end">${fmt(d.tarifa_compensada)}</td>
+      <td class="text-end text-muted">${d.n_faturas}</td>
+    </tr>
+  `).join('');
+  cardTabela.style.display = '';
+}
+
+// Carregar ao mudar qualquer filtro
+['f-dist', 'f-gd', 'f-usina'].forEach(id =>
+  document.getElementById(id).addEventListener('change', carregar)
+);
+
+// Carga inicial
+carregar();
+</script>
+
+{% endblock %}

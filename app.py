@@ -647,6 +647,58 @@ def api_tarifa_gerador():
     })
 
 
+@app.route("/analise-tarifaria")
+def analise_tarifaria():
+    distribuidoras = db.get_distribuidoras()
+    with db.get_conn() as conn:
+        usinas = conn.execute(
+            "SELECT DISTINCT usina_id FROM faturas WHERE usina_id IS NOT NULL ORDER BY usina_id"
+        ).fetchall()
+    return render_template("analise_tarifaria.html",
+                           distribuidoras=distribuidoras,
+                           usinas=[r["usina_id"] for r in usinas])
+
+
+@app.route("/api/analise-tarifaria")
+def api_analise_tarifaria():
+    from flask import jsonify
+    dist    = request.args.get("distribuidora", "").strip()
+    tipo_gd = request.args.get("tipo_gd", "").strip()
+    usina   = request.args.get("usina", "").strip()
+
+    cond, params = ["tarifa_geracao IS NOT NULL"], []
+    if dist:
+        cond.append("distribuidora = ?"); params.append(dist)
+    if tipo_gd:
+        cond.append("tipo_gd = ?"); params.append(tipo_gd)
+    if usina:
+        cond.append(
+            "(usina_id = ? OR usina_id LIKE ? OR usina_id LIKE ? OR usina_id LIKE ?)"
+        )
+        params += [usina, f"{usina};%", f"%;{usina}", f"%;{usina};%"]
+
+    where = " AND ".join(cond)
+    with db.get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT mes_referencia, AVG(tarifa_geracao) AS tarifa_geracao,
+                   AVG(tarifa_distribuidora) AS tarifa_distribuidora,
+                   AVG(tarifa_compensada) AS tarifa_compensada,
+                   COUNT(*) AS n_faturas
+            FROM faturas
+            WHERE {where}
+            GROUP BY mes_referencia
+            ORDER BY mes_referencia
+        """, params).fetchall()
+
+    return jsonify([{
+        "mes":                  r["mes_referencia"][:7],
+        "tarifa_geracao":       round(r["tarifa_geracao"], 6),
+        "tarifa_distribuidora": round(r["tarifa_distribuidora"], 6) if r["tarifa_distribuidora"] else None,
+        "tarifa_compensada":    round(r["tarifa_compensada"], 6)    if r["tarifa_compensada"]    else None,
+        "n_faturas":            r["n_faturas"],
+    } for r in rows])
+
+
 # Endpoint temporário para upload do banco de dados (protegido por token)
 @app.route("/admin/debug-log")
 def admin_debug_log():
