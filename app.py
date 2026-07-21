@@ -665,12 +665,15 @@ def api_analise_tarifaria():
     dist    = request.args.get("distribuidora", "").strip()
     tipo_gd = request.args.get("tipo_gd", "").strip()
     usina   = request.args.get("usina", "").strip()
+    modal   = request.args.get("modalidade", "").strip()
 
     cond, params = ["tarifa_geracao IS NOT NULL"], []
     if dist:
         cond.append("distribuidora = ?"); params.append(dist)
     if tipo_gd:
         cond.append("tipo_gd = ?"); params.append(tipo_gd)
+    if modal:
+        cond.append("modalidade = ?"); params.append(modal)
     if usina:
         cond.append(
             "(usina_id = ? OR usina_id LIKE ? OR usina_id LIKE ? OR usina_id LIKE ?)"

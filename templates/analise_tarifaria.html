@@ -40,6 +40,14 @@
         </select>
       </div>
       <div class="col-auto">
+        <label class="form-label mb-1 small">Modalidade</label>
+        <select id="f-modal" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          <option value="Autoconsumo">Autoconsumo</option>
+          <option value="Geração Compartilhada">Geração Compartilhada</option>
+        </select>
+      </div>
+      <div class="col-auto">
         <button class="btn btn-primary btn-sm" onclick="carregar()">Aplicar</button>
       </div>
     </div>
@@ -88,11 +96,13 @@ async function carregar() {
   const dist  = document.getElementById('f-dist').value;
   const gd    = document.getElementById('f-gd').value;
   const usina = document.getElementById('f-usina').value;
+  const modal = document.getElementById('f-modal').value;
 
   const params = new URLSearchParams();
   if (dist)  params.set('distribuidora', dist);
   if (gd)    params.set('tipo_gd', gd);
   if (usina) params.set('usina', usina);
+  if (modal) params.set('modalidade', modal);
 
   const resp = await fetch('/api/analise-tarifaria?' + params);
   const dados = await resp.json();
@@ -188,7 +198,7 @@ async function carregar() {
 }
 
 // Carregar ao mudar qualquer filtro
-['f-dist', 'f-gd', 'f-usina'].forEach(id =>
+['f-dist', 'f-gd', 'f-usina', 'f-modal'].forEach(id =>
   document.getElementById(id).addEventListener('change', carregar)
 );
 
