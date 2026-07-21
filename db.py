@@ -559,9 +559,9 @@ def get_variacoes_tarifa_gerador(limiar=0.05):
 
 def get_variacoes_faturas(limiar=0.05):
     """Igual a get_variacoes_tarifa_gerador, mas por fatura de cliente: compara
-    cada fatura com a mesma instalação no mês de referência anterior. Usado
-    para alertar no Dashboard quando a Tar. Geração de um cliente dá um salto
-    atípico de um mês pro outro.
+    cada fatura com a mesma instalação + concessionária + GD + modalidade no
+    mês de referência anterior. Usado para alertar no Dashboard quando a
+    Tar. Geração de um cliente dá um salto atípico de um mês pro outro.
 
     Retorna um dict {id_da_fatura: info}.
     """
@@ -574,7 +574,7 @@ def get_variacoes_faturas(limiar=0.05):
                    LAG(mes_referencia) OVER win AS mes_anterior
             FROM faturas
             WINDOW win AS (
-                PARTITION BY instalacao
+                PARTITION BY instalacao, distribuidora, tipo_gd, modalidade
                 ORDER BY mes_referencia
             )
         """).fetchall()
