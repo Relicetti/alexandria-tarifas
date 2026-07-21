@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS faturas (
     desconto_base           REAL NOT NULL,
     desconto_aplicado       REAL,
     cobra_band              INTEGER NOT NULL DEFAULT 0,
+    impostos_com_desconto   INTEGER NOT NULL DEFAULT 0,
 
     -- GER: TE + TUSD separados
     te_consumo              REAL,
@@ -124,6 +125,7 @@ _INLINE_COLS = [
     ("grupo",       "TEXT"),
     ("tipo_gd",     "TEXT DEFAULT 'GD1'"),
     ("modalidade",  "TEXT DEFAULT 'Geração Compartilhada'"),
+    ("impostos_com_desconto", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -343,7 +345,7 @@ _INPUT_COLS = [
     "cliente_id",
     "usina_id", "distribuidora", "instalacao", "grupo", "tipo_gd", "modalidade",
     "mes_referencia", "valor_concessionaria",
-    "consumo_kwh", "injetada_kwh", "desconto_base", "desconto_aplicado", "cobra_band",
+    "consumo_kwh", "injetada_kwh", "desconto_base", "desconto_aplicado", "cobra_band", "impostos_com_desconto",
     "te_consumo", "tusd_consumo", "te_compensada", "tusd_compensada",
     "tusd_distribuidora", "te_distribuidora", "desconto_injecao",
     "tarifa_distribuidora_input", "tarifa_compensada_input", "ajuste_gd2",

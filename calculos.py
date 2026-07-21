@@ -18,9 +18,11 @@ def _g(d, *keys, default=0.0):
 
 def _saidas(tarifa_dist, tarifa_comp, tarifa_bruta_inj,
             conc_com, conc_sem, inj, consumo,
-            desconto_base, desconto_ref_disponivel, desconto):
+            desconto_base, desconto_ref_disponivel, desconto,
+            impostos_com_desconto=False):
     """Calcula os 5 outputs finais a partir dos valores intermediários."""
-    valor_geracao = (tarifa_bruta_inj - (tarifa_dist - tarifa_comp) * (1 - desconto)) * inj
+    fator = (1 - desconto) if impostos_com_desconto else 1.0
+    valor_geracao = (tarifa_bruta_inj - (tarifa_dist - tarifa_comp) * fator) * inj
     valor_fat_com = conc_sem if valor_geracao == 0 else conc_com + valor_geracao
     valor_fat_sem = conc_sem
     desconto_final = valor_fat_sem - valor_fat_com
@@ -99,7 +101,8 @@ def calcular_GER(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc)
+                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_EQT(d):
@@ -123,7 +126,8 @@ def calcular_EQT(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc)
+                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_NEOENERGIA(d):
@@ -147,7 +151,8 @@ def calcular_NEOENERGIA(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc)
+                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_ENERGISA(d):
@@ -169,7 +174,8 @@ def calcular_ENERGISA(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc)
+                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_LIGHT(d):
@@ -194,7 +200,8 @@ def calcular_LIGHT(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc)
+                   inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_CEMIG(d):
@@ -215,7 +222,8 @@ def calcular_CEMIG(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc)
+                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 def calcular_BRASILIA(d):
@@ -235,7 +243,8 @@ def calcular_BRASILIA(d):
     conc_sem = _conc_sem_std(consumo, tarifa_dist, tb_cons)
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
-                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc)
+                   inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
 
 
 # ── dispatcher ────────────────────────────────────────────────────────────────

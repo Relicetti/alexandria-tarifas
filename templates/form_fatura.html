@@ -152,6 +152,11 @@
               {{ 'checked' if fatura and fatura.cobra_band else '' }}>
             <label class="form-check-label" for="cobra_band">Cobrar bandeira do cliente</label>
           </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input calc" type="checkbox" name="impostos_com_desconto" id="impostos_com_desconto"
+              {{ 'checked' if fatura and fatura.impostos_com_desconto else '' }}>
+            <label class="form-check-label" for="impostos_com_desconto">Aplicar desconto sobre impostos</label>
+          </div>
 
           <!-- GER / EQT / CEMIG: 6 campos com kWh -->
           <div id="bloco_band_kwh">
@@ -611,6 +616,7 @@ function calcPreview() {
   const db  = v('desconto_base_pct') / 100;
   const da  = v('desconto_aplicado_pct') / 100 || db;
   const cobra = bv('cobra_band');
+  const impostosComDesc = bv('impostos_com_desconto');
   const res_kwh = consumo - inj;
 
   let td = 0, tc = 0, tb_cons = 0, tb_inj = 0;
@@ -674,7 +680,8 @@ function calcPreview() {
     conc_com = res_kwh * (td + tb_cons) + (td - tc) * inj;
 
   // --- valor_geracao ---
-  const v_ger = (tb_bruta - (td - tc) * (1 - desc_usar)) * inj;
+  const fator = impostosComDesc ? (1 - desc_usar) : 1.0;
+  const v_ger = (tb_bruta - (td - tc) * fator) * inj;
   const v_fat_com = v_ger === 0 ? conc_sem : conc_com + v_ger;
   const desc_fin  = conc_sem - v_fat_com;
   const tg  = inj ? v_ger / inj : 0;
@@ -735,6 +742,7 @@ document.getElementById('formFatura').addEventListener('submit', function() {
 // Inicialização
 document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', calcPreview));
 document.getElementById('cobra_band').addEventListener('change', calcPreview);
+document.getElementById('impostos_com_desconto').addEventListener('change', calcPreview);
 if (grupoAtual) aplicarGrupo(grupoAtual);
 
 // Aplica desconto da distribuidora se campo já vier preenchido (ex: extração PDF)

@@ -71,7 +71,39 @@ Instruções:
 - consumo_kwh: kWh totais consumidos (pode aparecer como "Consumo faturado")
 - injetada_kwh: energia injetada/compensada pelo sistema GD solar
 
-- Para faturas com MÚLTIPLAS FAIXAS DE ICMS no consumo (ex: CELESC, CEEE — faixa 12% e faixa 17%):
+- Para faturas CELESC G2 (Geração Distribuída Remota — energia vinda de outra UC):
+  Os itens da fatura seguem este padrão de códigos:
+  * (0P) Consumo TE         — kWh residuais (com ICMS), preço inclui impostos
+  * (0Q) Con TE Is I/P/C   — kWh compensados pela injeção GD2 (isentos ICMS/PIS/COFINS), mesmo preço unitário sem impostos
+  * (0S) Consumo TUSD       — kWh residuais TUSD (com ICMS)
+  * (0T) Con TUSD Is P/C    — kWh compensados TUSD (isentos PIS/COFINS), pode ter múltiplas faixas de ICMS
+  * (12) El oUC Me TE G2    — CRÉDITO TE da energia injetada de outra UC (valor negativo)
+  * (13) El oUC Me TU G2    — CRÉDITO TUSD da energia injetada de outra UC (valor negativo)
+  * (6U) Ben Tar Brut G2    — Benefício tarifário bruto GD2 (diferença TUSD cobrada vs creditada)
+  * (73) Ben Tar Líq G2     — Benefício tarifário líquido GD2 (mesmo valor negativo — cancela o (6U) nesta UC)
+
+  REGRAS para CELESC G2 — fórmulas exatas:
+  * consumo_kwh  = (0P) kWh + (0Q) kWh  (total consumido, incluindo compensado)
+  * injetada_kwh = kWh do item (12) ou (13) — são iguais
+  * grupo = "GER"
+  * tarifa_distribuidora_input = null, tarifa_compensada_input = null, ajuste_gd2 = 0
+  * te_consumo   = preço(0P)  — tarifa TE com ICMS
+  * tusd_consumo = preço(0S)  — tarifa TUSD com ICMS
+  * te_compensada   = preço(12)  +  (preço(0P) − preço(0Q))
+      (se preço(0Q) = preço(12), simplifica para preço(0P))
+  * tusd_compensada = preço(13)  +  (preço(0S) − preço_ponderado(0T))
+      onde preço_ponderado(0T) = Σ(kWh_faixa × preço_faixa) / Σ(kWh_faixa) de todas as linhas (0T)
+  Exemplo com os valores da fatura de referência:
+      preço_ponderado(0T) = (44×0.425036 + 400×0.450306) / 444 = 0.447801
+      te_consumo          = 0.397741
+      tusd_consumo        = 0.461791
+      te_compensada       = 0.32193 + (0.397741 − 0.32193) = 0.397741
+      tusd_compensada     = 0.294104 + (0.461791 − 0.447801) = 0.308094
+
+- Para faturas CELESC G1 (geração local, sem injeção remota): usar o padrão GER normal
+  (te_consumo + tusd_consumo separados, te_compensada + tusd_compensada, grupo = "GER")
+
+- Para faturas com MÚLTIPLAS FAIXAS DE ICMS no consumo (ex: CELESC G1, CEEE — faixa 12% e faixa 17%):
   As linhas de "Consumo TE" e "Consumo TUSD" aparecem REPETIDAS com kWh e tarifas diferentes.
   Neste caso calcule a MÉDIA PONDERADA pelo kWh de cada faixa:
   * te_consumo   = Σ(kWh_faixa × preço_TE_faixa)   / Σ(kWh_faixa)   — use "Preço unit. c/ trib."
@@ -81,7 +113,7 @@ Instruções:
   * te_compensada   = Σ(kWh_inj × |preço_TE_inj|)   / Σ(kWh_inj)   — use valor absoluto da tarifa
   * tusd_compensada = Σ(kWh_inj × |preço_TUSD_inj|) / Σ(kWh_inj)
   * injetada_kwh = soma total dos kWh injetados
-  Exemplo CELESC: TE faixa1=150kWh×0,377933 + faixa2=1240kWh×0,400726 → te_consumo=(56,69+496,90)/1390=0,398482
+  Exemplo CELESC G1: TE faixa1=150kWh×0,377933 + faixa2=1240kWh×0,400726 → te_consumo=(56,69+496,90)/1390=0,398482
 - Para faturas CEMIG/EQT: procure pelos itens SCEE na discriminação de serviços
 - Para faturas LIGHT (Light S.A. — RJ):
   * consumo_kwh = coluna "Consumo kWh" da tabela do medidor (linha "Energia kWh" / "Tarifa Convencional")

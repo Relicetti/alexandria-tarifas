@@ -130,6 +130,7 @@ def _parse_form(form):
     """Extrai e converte todos os campos do formulário."""
     f = form
     cobra = 1 if f.get("cobra_band") else 0
+    impostos_com_desc = 1 if f.get("impostos_com_desconto") else 0
     d = {
         "cliente_id":               None,
         "usina_id":                 f.get("usina_id", ""),
@@ -145,6 +146,7 @@ def _parse_form(form):
         "desconto_base":            _float(f.get("desconto_base_pct"), 0) / 100,
         "desconto_aplicado":        _float(f.get("desconto_aplicado_pct"), 0) / 100 or None,
         "cobra_band":               cobra,
+        "impostos_com_desconto":    impostos_com_desc,
         # GER
         "te_consumo":               _float(f.get("te_consumo")),
         "tusd_consumo":             _float(f.get("tusd_consumo")),
@@ -539,7 +541,13 @@ def api_tarifa_gerador():
     # Mês pode chegar como YYYY-MM; no banco está YYYY-MM-01
     mes_db = mes[:7] + "-01"
 
-    cond   = ["f.distribuidora = ?", "f.mes_referencia = ?"]
+    _usina_filter = (
+        "(f.usina_id IN ('101','102','9')"
+        " OR f.usina_id LIKE '101;%' OR f.usina_id LIKE '%;101' OR f.usina_id LIKE '%;101;%'"
+        " OR f.usina_id LIKE '102;%' OR f.usina_id LIKE '%;102' OR f.usina_id LIKE '%;102;%'"
+        " OR f.usina_id LIKE '9;%'   OR f.usina_id LIKE '%;9'   OR f.usina_id LIKE '%;9;%')"
+    )
+    cond   = ["f.distribuidora = ?", "f.mes_referencia = ?", _usina_filter]
     params = [dist, mes_db]
 
     if tipo_gd:
@@ -568,7 +576,13 @@ def api_tarifa_gerador():
         """, params).fetchone()
 
         # Desconto GD: média das faturas reais da distribuidora
-        cond_desc   = ["distribuidora = ?", "instalacao NOT LIKE 'HIST-%'", "desconto_base IS NOT NULL"]
+        _usina_filter_d = (
+            "(usina_id IN ('101','102','9')"
+            " OR usina_id LIKE '101;%' OR usina_id LIKE '%;101' OR usina_id LIKE '%;101;%'"
+            " OR usina_id LIKE '102;%' OR usina_id LIKE '%;102' OR usina_id LIKE '%;102;%'"
+            " OR usina_id LIKE '9;%'   OR usina_id LIKE '%;9'   OR usina_id LIKE '%;9;%')"
+        )
+        cond_desc   = ["distribuidora = ?", "instalacao NOT LIKE 'HIST-%'", "desconto_base IS NOT NULL", _usina_filter_d]
         params_desc = [dist]
         if tipo_gd:
             cond_desc.append("tipo_gd = ?")
