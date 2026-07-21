@@ -506,3 +506,76 @@ def get_tarifas_gerador(distribuidora=None, mes=None):
 def deletar_tarifa_gerador(id):
     with get_conn() as conn:
         conn.execute("DELETE FROM tarifas_gerador WHERE id=?", (id,))
+
+
+# Campos cuja variação mês-a-mês é monitorada (ANEEL só costuma reajustar
+# tarifa_distribuidora/compensada em revisão tarifária; t_gerador e tarifa_geracao
+# herdam isso). tarifa_geracao é o foco principal: é o que a geradora efetivamente
+# cobra na fatura real.
+_CAMPOS_VARIACAO_GERADOR = ["tarifa_geracao", "tarifa_distribuidora", "tarifa_compensada", "t_gerador"]
+_CAMPOS_VARIACAO_FATURA  = ["tarifa_geracao", "tarifa_distribuidora", "tarifa_compensada"]
+
+
+def _montar_variacoes(rows, campos, limiar):
+    variacoes = {}
+    for r in rows:
+        info = {"mes_anterior": r["mes_anterior"], "campos": {}, "alerta": False}
+        for campo in campos:
+            atual, anterior = r[campo], r[f"{campo}_ant"]
+            if atual is not None and anterior:
+                pct = (atual - anterior) / anterior
+                info["campos"][campo] = {"pct": pct, "anterior": anterior}
+                if abs(pct) >= limiar:
+                    info["alerta"] = True
+            else:
+                info["campos"][campo] = None
+        variacoes[r["id"]] = info
+    return variacoes
+
+
+def get_variacoes_tarifa_gerador(limiar=0.05):
+    """Compara cada tarifa salva com a do mês de referência anterior para a
+    mesma distribuidora + tipo_gd + modalidade, e sinaliza (alerta=True)
+    quando alguma variação passa do limiar (padrão 5%) — o que normalmente
+    só deveria acontecer em revisão tarifária.
+
+    Retorna um dict {id_da_linha: info}, para ser cruzado com get_tarifas_gerador().
+    """
+    campos = _CAMPOS_VARIACAO_GERADOR
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT id, mes_referencia,
+                   {", ".join(campos)},
+                   {", ".join(f"LAG({c}) OVER win AS {c}_ant" for c in campos)},
+                   LAG(mes_referencia) OVER win AS mes_anterior
+            FROM tarifas_gerador
+            WINDOW win AS (
+                PARTITION BY distribuidora, tipo_gd, modalidade
+                ORDER BY mes_referencia
+            )
+        """).fetchall()
+    return _montar_variacoes(rows, campos, limiar)
+
+
+def get_variacoes_faturas(limiar=0.05):
+    """Igual a get_variacoes_tarifa_gerador, mas por fatura de cliente: compara
+    cada fatura com a mesma instalação + concessionária + GD + modalidade no
+    mês de referência anterior. Usado para alertar no Dashboard quando a
+    Tar. Geração de um cliente dá um salto atípico de um mês pro outro.
+
+    Retorna um dict {id_da_fatura: info}.
+    """
+    campos = _CAMPOS_VARIACAO_FATURA
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT id, mes_referencia,
+                   {", ".join(campos)},
+                   {", ".join(f"LAG({c}) OVER win AS {c}_ant" for c in campos)},
+                   LAG(mes_referencia) OVER win AS mes_anterior
+            FROM faturas
+            WINDOW win AS (
+                PARTITION BY instalacao, distribuidora, tipo_gd, modalidade
+                ORDER BY mes_referencia
+            )
+        """).fetchall()
+    return _montar_variacoes(rows, campos, limiar)
