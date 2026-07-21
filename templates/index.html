@@ -43,6 +43,17 @@
           {% endfor %}
         </select>
       </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small">Alertar variação Tar. Geração ≥</label>
+        <div class="input-group input-group-sm" style="width:110px">
+          <input type="number" name="limiar" value="{{ '%.1f'|format(limiar*100) }}"
+                 step="0.5" min="0" class="form-control">
+          <span class="input-group-text">%</span>
+        </div>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary">Aplicar</button>
+      </div>
     </form>
   </div>
 </div>
@@ -87,6 +98,7 @@
             <th class="text-end" style="width:1%">Tar. Dist.</th>
             <th class="text-end" style="width:1%">Tar. Comp.</th>
             <th class="text-end" style="width:1%">Tar. Geração</th>
+            <th class="text-end" style="width:1%">Variação</th>
             <th class="text-end" style="width:1%">Desc. Real</th>
             <th class="text-end" style="width:1%">Desc. Ref.</th>
             <th class="text-end text-white small" style="width:1%">Criado em</th>
@@ -96,7 +108,8 @@
         <tbody>
           {% set ns = namespace(grupo_atual='') %}
           {% for f in faturas %}
-            <tr>
+            {% set v = variacoes.get(f.id) %}
+            <tr class="{{ 'table-danger' if v and v.alerta }}">
               <td>
                 {% if f.grupo != ns.grupo_atual %}
                   <span class="badge bg-secondary">{{ f.grupo }}</span>
@@ -125,6 +138,15 @@
               </td>
               <td class="text-end text-nowrap">
                 {% if f.tarifa_geracao %}R$ {{ "%.4f"|format(f.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if v and v.campos.tarifa_geracao %}
+                  {% set pct = v.campos.tarifa_geracao.pct %}
+                  <span class="fw-bold {{ 'text-danger' if pct >= limiar else ('text-primary' if pct <= -limiar else 'text-muted') }}"
+                        title="Mês anterior ({{ v.mes_anterior[:7] if v.mes_anterior else '—' }}): R$ {{ '%.4f'|format(v.campos.tarifa_geracao.anterior)|replace('.',',') }}">
+                    {{ '▲' if pct > 0 else '▼' if pct < 0 else '' }} {{ "%.2f"|format(pct*100)|replace('.',',') }}%
+                  </span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td class="text-end text-nowrap">
                 {% if f.desconto_real is not none %}
