@@ -165,16 +165,17 @@
         </tr>
       </thead>
       <tbody>
+        {% set labels = {'tarifa_geracao': 'Tar. Geração', 'tarifa_distribuidora': 'Tar. Distribuidora', 'tarifa_compensada': 'Tar. Compensada', 't_gerador': 'T_gerador'} %}
         {% for a in alertas %}
           {% set s = a.linha %}
           {% for campo, dados in a.info.campos.items() %}
             {% if dados and (dados.pct >= limiar or dados.pct <= -limiar) %}
-            <tr>
+            <tr class="{{ 'fw-bold' if campo == 'tarifa_geracao' }}">
               <td class="ps-3 fw-semibold">{{ s.distribuidora }}</td>
               <td>{{ s.tipo_gd or '—' }} / {{ s.modalidade or '—' }}</td>
               <td>{{ s.mes_referencia[:7] }}</td>
               <td class="text-muted">{{ a.info.mes_anterior[:7] if a.info.mes_anterior else '—' }}</td>
-              <td>{{ campo }}</td>
+              <td>{{ labels.get(campo, campo) }}</td>
               <td class="text-end">R$ {{ "%.6f"|format(dados.anterior)|replace('.',',') }}</td>
               <td class="text-end">R$ {{ "%.6f"|format(s[campo])|replace('.',',') }}</td>
               <td class="text-end pe-3 fw-bold {{ 'text-danger' if dados.pct > 0 else 'text-primary' }}">
@@ -223,8 +224,8 @@
             <th class="text-end">Tar. Dist.</th>
             <th class="text-end">Deságio</th>
             <th class="text-end text-warning fw-bold">T_gerador</th>
-            <th class="text-end">Variação</th>
             <th class="text-end">Tar. Geração</th>
+            <th class="text-end">Variação</th>
             <th class="text-end text-info fw-bold">% Ganho</th>
             <th class="text-end text-white small">Salvo em</th>
             <th></th>
@@ -244,16 +245,16 @@
             <td class="text-end">{% if s.desagio is not none %}{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end fw-bold text-success">{% if s.t_gerador %}R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end">
-              {% if v and v.campos.t_gerador %}
-                {% set pct = v.campos.t_gerador.pct %}
+              {% if s.tarifa_geracao %}R$ {{ "%.6f"|format(s.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="text-end">
+              {% if v and v.campos.tarifa_geracao %}
+                {% set pct = v.campos.tarifa_geracao.pct %}
                 <span class="fw-bold {{ 'text-danger' if pct >= limiar else ('text-primary' if pct <= -limiar else 'text-muted') }}"
-                      title="Mês anterior ({{ v.mes_anterior[:7] if v.mes_anterior else '—' }}): R$ {{ '%.6f'|format(v.campos.t_gerador.anterior)|replace('.',',') }}">
+                      title="Mês anterior ({{ v.mes_anterior[:7] if v.mes_anterior else '—' }}): R$ {{ '%.6f'|format(v.campos.tarifa_geracao.anterior)|replace('.',',') }}">
                   {{ '▲' if pct > 0 else '▼' if pct < 0 else '' }} {{ "%.2f"|format(pct*100)|replace('.',',') }}%
                 </span>
               {% else %}<span class="text-muted">—</span>{% endif %}
-            </td>
-            <td class="text-end">
-              {% if s.tarifa_geracao %}R$ {{ "%.6f"|format(s.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
             </td>
             <td class="text-end fw-bold text-info">
               {% if s.tarifa_geracao and s.t_gerador %}
@@ -458,8 +459,8 @@ function adicionarLinhaTabela(p) {
     <td class="text-end">${fmtTar(p.tarifa_distribuidora)}</td>
     <td class="text-end">${fmtPct(p.desagio)}</td>
     <td class="text-end fw-bold text-success">${fmtTar(p.t_gerador)}</td>
-    <td class="text-end text-muted" title="Recarregue a página para calcular a variação vs. mês anterior">—</td>
     <td class="text-end">${fmtTar(p.tarifa_geracao)}</td>
+    <td class="text-end text-muted" title="Recarregue a página para calcular a variação vs. mês anterior">—</td>
     <td class="text-end fw-bold text-info">${p.tarifa_geracao && p.t_gerador ? ((p.tarifa_geracao - p.t_gerador) / p.tarifa_geracao * 100).toFixed(2).replace('.', ',') + '%' : '—'}</td>
     <td class="text-end text-muted small">${p.criado_em ? p.criado_em.substring(0,16).replace('T',' ') : new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</td>
     <td class="text-end pe-2"><button class="btn btn-sm btn-outline-danger py-0" onclick="this.closest('tr').remove()">×</button></td>

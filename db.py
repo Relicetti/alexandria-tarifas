@@ -509,8 +509,10 @@ def deletar_tarifa_gerador(id):
 
 
 # Campos cuja variação mês-a-mês é monitorada (ANEEL só costuma reajustar
-# tarifa_distribuidora/compensada em revisão tarifária; t_gerador herda isso).
-_CAMPOS_VARIACAO = ["tarifa_distribuidora", "tarifa_compensada", "t_gerador"]
+# tarifa_distribuidora/compensada em revisão tarifária; t_gerador e tarifa_geracao
+# herdam isso). tarifa_geracao é o foco principal: é o que a geradora efetivamente
+# cobra na fatura real.
+_CAMPOS_VARIACAO = ["tarifa_geracao", "tarifa_distribuidora", "tarifa_compensada", "t_gerador"]
 
 
 def get_variacoes_tarifa_gerador(limiar=0.08):
