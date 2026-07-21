@@ -515,10 +515,10 @@ def deletar_tarifa_gerador(id):
 _CAMPOS_VARIACAO = ["tarifa_geracao", "tarifa_distribuidora", "tarifa_compensada", "t_gerador"]
 
 
-def get_variacoes_tarifa_gerador(limiar=0.08):
+def get_variacoes_tarifa_gerador(limiar=0.05):
     """Compara cada tarifa salva com a do mês de referência anterior para a
     mesma distribuidora + tipo_gd + modalidade, e sinaliza (alerta=True)
-    quando alguma variação passa do limiar (padrão 8%) — o que normalmente
+    quando alguma variação passa do limiar (padrão 5%) — o que normalmente
     só deveria acontecer em revisão tarifária.
 
     Retorna um dict {id_da_linha: info}, para ser cruzado com get_tarifas_gerador().

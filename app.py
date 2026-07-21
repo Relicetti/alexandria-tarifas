@@ -413,9 +413,9 @@ def tarifa_gerador():
     meses          = db.get_meses_disponiveis()
     salvos         = db.get_tarifas_gerador()
     try:
-        limiar = float(request.args.get("limiar", 8)) / 100
+        limiar = float(request.args.get("limiar", 5)) / 100
     except ValueError:
-        limiar = 0.08
+        limiar = 0.05
     variacoes = db.get_variacoes_tarifa_gerador(limiar=limiar)
     alertas = [
         {"linha": s, "info": variacoes[s["id"]]}
