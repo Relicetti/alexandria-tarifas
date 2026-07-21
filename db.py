@@ -506,3 +506,45 @@ def get_tarifas_gerador(distribuidora=None, mes=None):
 def deletar_tarifa_gerador(id):
     with get_conn() as conn:
         conn.execute("DELETE FROM tarifas_gerador WHERE id=?", (id,))
+
+
+# Campos cuja variação mês-a-mês é monitorada (ANEEL só costuma reajustar
+# tarifa_distribuidora/compensada em revisão tarifária; t_gerador herda isso).
+_CAMPOS_VARIACAO = ["tarifa_distribuidora", "tarifa_compensada", "t_gerador"]
+
+
+def get_variacoes_tarifa_gerador(limiar=0.08):
+    """Compara cada tarifa salva com a do mês de referência anterior para a
+    mesma distribuidora + tipo_gd + modalidade, e sinaliza (alerta=True)
+    quando alguma variação passa do limiar (padrão 8%) — o que normalmente
+    só deveria acontecer em revisão tarifária.
+
+    Retorna um dict {id_da_linha: info}, para ser cruzado com get_tarifas_gerador().
+    """
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT id, mes_referencia,
+                   {", ".join(_CAMPOS_VARIACAO)},
+                   {", ".join(f"LAG({c}) OVER win AS {c}_ant" for c in _CAMPOS_VARIACAO)},
+                   LAG(mes_referencia) OVER win AS mes_anterior
+            FROM tarifas_gerador
+            WINDOW win AS (
+                PARTITION BY distribuidora, tipo_gd, modalidade
+                ORDER BY mes_referencia
+            )
+        """).fetchall()
+
+    variacoes = {}
+    for r in rows:
+        info = {"mes_anterior": r["mes_anterior"], "campos": {}, "alerta": False}
+        for campo in _CAMPOS_VARIACAO:
+            atual, anterior = r[campo], r[f"{campo}_ant"]
+            if atual is not None and anterior:
+                pct = (atual - anterior) / anterior
+                info["campos"][campo] = {"pct": pct, "anterior": anterior}
+                if abs(pct) >= limiar:
+                    info["alerta"] = True
+            else:
+                info["campos"][campo] = None
+        variacoes[r["id"]] = info
+    return variacoes

@@ -412,10 +412,22 @@ def tarifa_gerador():
     distribuidoras = db.get_distribuidoras()
     meses          = db.get_meses_disponiveis()
     salvos         = db.get_tarifas_gerador()
+    try:
+        limiar = float(request.args.get("limiar", 8)) / 100
+    except ValueError:
+        limiar = 0.08
+    variacoes = db.get_variacoes_tarifa_gerador(limiar=limiar)
+    alertas = [
+        {"linha": s, "info": variacoes[s["id"]]}
+        for s in salvos if variacoes.get(s["id"], {}).get("alerta")
+    ]
     return render_template("tarifa_gerador.html",
                            distribuidoras=distribuidoras,
                            meses=meses,
-                           salvos=salvos)
+                           salvos=salvos,
+                           variacoes=variacoes,
+                           alertas=alertas,
+                           limiar=limiar)
 
 
 @app.route("/api/tarifa-gerador/salvar", methods=["POST"])

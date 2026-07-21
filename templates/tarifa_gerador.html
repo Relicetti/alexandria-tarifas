@@ -144,10 +144,63 @@
   </div>
 </div>
 
+<!-- Alertas de variação -->
+{% if alertas %}
+<div class="card mt-4 shadow-sm border-danger">
+  <div class="card-header bg-danger text-white fw-bold">
+    🔔 {{ alertas|length }} alerta{{ 's' if alertas|length != 1 }} de variação ≥ {{ "%.1f"|format(limiar*100)|replace('.',',') }}%
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0 small">
+      <thead>
+        <tr>
+          <th class="ps-3">Distribuidora</th>
+          <th>Tipo / Modalidade</th>
+          <th>Mês</th>
+          <th>vs. mês</th>
+          <th>Campo</th>
+          <th class="text-end">Anterior</th>
+          <th class="text-end">Atual</th>
+          <th class="text-end pe-3">Variação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in alertas %}
+          {% set s = a.linha %}
+          {% for campo, dados in a.info.campos.items() %}
+            {% if dados and (dados.pct >= limiar or dados.pct <= -limiar) %}
+            <tr>
+              <td class="ps-3 fw-semibold">{{ s.distribuidora }}</td>
+              <td>{{ s.tipo_gd or '—' }} / {{ s.modalidade or '—' }}</td>
+              <td>{{ s.mes_referencia[:7] }}</td>
+              <td class="text-muted">{{ a.info.mes_anterior[:7] if a.info.mes_anterior else '—' }}</td>
+              <td>{{ campo }}</td>
+              <td class="text-end">R$ {{ "%.6f"|format(dados.anterior)|replace('.',',') }}</td>
+              <td class="text-end">R$ {{ "%.6f"|format(s[campo])|replace('.',',') }}</td>
+              <td class="text-end pe-3 fw-bold {{ 'text-danger' if dados.pct > 0 else 'text-primary' }}">
+                {{ '▲' if dados.pct > 0 else '▼' }} {{ "%.2f"|format(dados.pct*100)|replace('.',',') }}%
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Tabela de resultados salvos -->
 <div class="card mt-4 shadow-sm" id="card-salvos">
-  <div class="card-header d-flex justify-content-between align-items-center">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <span class="fw-semibold">📋 Resultados Salvos</span>
+    <form method="get" class="d-flex align-items-center gap-2 mb-0">
+      <label class="small text-muted mb-0">Alertar variação ≥</label>
+      <input type="number" name="limiar" value="{{ '%.1f'|format(limiar*100) }}"
+             step="0.5" min="0" class="form-control form-control-sm" style="width:70px">
+      <span class="small text-muted">%</span>
+      <button class="btn btn-sm btn-outline-secondary">Aplicar</button>
+    </form>
     <div class="d-flex align-items-center gap-2">
       <a href="/tarifa-gerador/exportar" class="btn btn-sm btn-outline-success">↓ Exportar Excel</a>
       <span class="badge bg-secondary" id="badge-salvos">{{ salvos|length }}</span>
@@ -170,6 +223,7 @@
             <th class="text-end">Tar. Dist.</th>
             <th class="text-end">Deságio</th>
             <th class="text-end text-warning fw-bold">T_gerador</th>
+            <th class="text-end">Variação</th>
             <th class="text-end">Tar. Geração</th>
             <th class="text-end text-info fw-bold">% Ganho</th>
             <th class="text-end text-white small">Salvo em</th>
@@ -178,7 +232,8 @@
         </thead>
         <tbody id="tbody-salvos">
           {% for s in salvos %}
-          <tr id="row-{{ s.id }}">
+          {% set v = variacoes.get(s.id) %}
+          <tr id="row-{{ s.id }}" class="{{ 'table-danger' if v and v.alerta }}">
             <td class="ps-3 fw-semibold">{{ s.distribuidora }}</td>
             <td>{{ s.mes_referencia[:7] }}</td>
             <td><span class="badge bg-info text-dark">{{ s.tipo_gd or '—' }}</span></td>
@@ -188,6 +243,15 @@
             <td class="text-end">{% if s.tarifa_distribuidora %}R$ {{ "%.6f"|format(s.tarifa_distribuidora)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end">{% if s.desagio is not none %}{{ "%.2f"|format(s.desagio * 100)|replace('.',',') }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
             <td class="text-end fw-bold text-success">{% if s.t_gerador %}R$ {{ "%.6f"|format(s.t_gerador)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">
+              {% if v and v.campos.t_gerador %}
+                {% set pct = v.campos.t_gerador.pct %}
+                <span class="fw-bold {{ 'text-danger' if pct >= limiar else ('text-primary' if pct <= -limiar else 'text-muted') }}"
+                      title="Mês anterior ({{ v.mes_anterior[:7] if v.mes_anterior else '—' }}): R$ {{ '%.6f'|format(v.campos.t_gerador.anterior)|replace('.',',') }}">
+                  {{ '▲' if pct > 0 else '▼' if pct < 0 else '' }} {{ "%.2f"|format(pct*100)|replace('.',',') }}%
+                </span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
             <td class="text-end">
               {% if s.tarifa_geracao %}R$ {{ "%.6f"|format(s.tarifa_geracao)|replace('.',',') }}{% else %}<span class="text-muted">—</span>{% endif %}
             </td>
@@ -394,6 +458,7 @@ function adicionarLinhaTabela(p) {
     <td class="text-end">${fmtTar(p.tarifa_distribuidora)}</td>
     <td class="text-end">${fmtPct(p.desagio)}</td>
     <td class="text-end fw-bold text-success">${fmtTar(p.t_gerador)}</td>
+    <td class="text-end text-muted" title="Recarregue a página para calcular a variação vs. mês anterior">—</td>
     <td class="text-end">${fmtTar(p.tarifa_geracao)}</td>
     <td class="text-end fw-bold text-info">${p.tarifa_geracao && p.t_gerador ? ((p.tarifa_geracao - p.t_gerador) / p.tarifa_geracao * 100).toFixed(2).replace('.', ',') + '%' : '—'}</td>
     <td class="text-end text-muted small">${p.criado_em ? p.criado_em.substring(0,16).replace('T',' ') : new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</td>
