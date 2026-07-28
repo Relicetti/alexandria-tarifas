@@ -83,22 +83,24 @@ Instruções:
   * (73) Ben Tar Líq G2     — Benefício tarifário líquido GD2 (mesmo valor negativo — cancela o (6U) nesta UC)
 
   REGRAS para CELESC G2 — fórmulas exatas:
-  * consumo_kwh  = (0P) kWh + (0Q) kWh  (total consumido, incluindo compensado)
+  * consumo_kwh  = soma de TODOS os kWh (0P) + soma de todos os kWh (0Q)
   * injetada_kwh = kWh do item (12) ou (13) — são iguais
   * grupo = "GER"
   * tarifa_distribuidora_input = null, tarifa_compensada_input = null, ajuste_gd2 = 0
-  * te_consumo   = preço(0P)  — tarifa TE com ICMS
-  * tusd_consumo = preço(0S)  — tarifa TUSD com ICMS
-  * te_compensada   = preço(12)  +  (preço(0P) − preço(0Q))
-      (se preço(0Q) = preço(12), simplifica para preço(0P))
-  * tusd_compensada = preço(13)  +  (preço(0S) − preço_ponderado(0T))
+  * ATENÇÃO: (0P) e (0S) podem aparecer em MÚLTIPLAS LINHAS (uma por faixa de ICMS, ex: 12% e 17%).
+    Sempre calcule a MÉDIA PONDERADA pelo kWh:
+  * te_consumo   = Σ(kWh_faixa_0P × preço_faixa_0P) / Σ(kWh_faixa_0P)
+  * tusd_consumo = Σ(kWh_faixa_0S × preço_faixa_0S) / Σ(kWh_faixa_0S)
+  * te_compensada   = preço(12)  +  (te_consumo − preço(0Q))
+      (quando preço(0Q) = preço(12), simplifica para te_consumo)
+  * tusd_compensada = preço(13)  +  (tusd_consumo − preço_ponderado(0T))
       onde preço_ponderado(0T) = Σ(kWh_faixa × preço_faixa) / Σ(kWh_faixa) de todas as linhas (0T)
-  Exemplo com os valores da fatura de referência:
-      preço_ponderado(0T) = (44×0.425036 + 400×0.450306) / 444 = 0.447801
-      te_consumo          = 0.397741
-      tusd_consumo        = 0.461791
-      te_compensada       = 0.32193 + (0.397741 − 0.32193) = 0.397741
-      tusd_compensada     = 0.294104 + (0.461791 − 0.447801) = 0.308094
+  Exemplo com fatura de referência (duas faixas 0P e 0S: 12% e 17%):
+      te_consumo      = (150×0.397733 + 160.662×0.421694) / 310.662 = 0.410125
+      tusd_consumo    = (150×0.461733 + 160.662×0.489538) / 310.662 = 0.476113
+      preço_pond(0T)  = 0.450252 (faixa única)
+      te_compensada   = 0.321930 + (0.410125 − 0.321930) = 0.410125
+      tusd_compensada = 0.294104 + (0.476113 − 0.450252) = 0.319965
 
 - Para faturas CELESC G1 (geração local, sem injeção remota): usar o padrão GER normal
   (te_consumo + tusd_consumo separados, te_compensada + tusd_compensada, grupo = "GER")
