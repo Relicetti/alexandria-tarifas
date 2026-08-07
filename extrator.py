@@ -116,7 +116,28 @@ Instruções:
   * tusd_compensada = Σ(kWh_inj × |preço_TUSD_inj|) / Σ(kWh_inj)
   * injetada_kwh = soma total dos kWh injetados
   Exemplo CELESC G1: TE faixa1=150kWh×0,377933 + faixa2=1240kWh×0,400726 → te_consumo=(56,69+496,90)/1390=0,398482
-- Para faturas CEMIG/EQT: procure pelos itens SCEE na discriminação de serviços
+- Para faturas EQT — Equatorial (AL/MA/PA/PI/GO/CEEE/CEA):
+  A fatura Equatorial tem linhas com colunas: kWh | Preço c/ tributos | Preço s/ tributos | coluna4 | coluna5 | Valor R$ total
+  Use SEMPRE o "Valor R$ total" (última coluna numérica da linha), NUNCA as colunas intermediárias (PIS, COFINS, ICMS).
+  * consumo_kwh = kWh da linha "Consumo (kWh)" + kWh da linha "Consumo Compensado (kWh)"  (total consumido)
+  * injetada_kwh = kWh da linha "Consumo Compensado" ou "Energia Inj. oUC" (são iguais)
+  * tarifa_distribuidora_input = Preço c/ tributos (2ª coluna) da linha "Consumo (kWh)"
+    Exemplo: "Consumo (kWh) 162,29  1,152998  0,843180 ... 187,12" → tarifa_distribuidora_input = 1.152998
+  * scee_consumo = Valor R$ total da linha "Consumo Compensado (kWh)" (positivo)
+    Exemplo: "Consumo Compensado (kWh) 896,70  0,822572 ... 737,60" → scee_consumo = 737.60
+  * scee_injecao = Valor R$ total da linha "Energia Inj. oUC" (NEGATIVO — crédito que cancela o consumo compensado)
+    Exemplo: "Energia Inj. oUC 07/2026 mPT (kWh) 896,70 ... -737,60" → scee_injecao = -737.60
+    (scee_consumo + scee_injecao ≈ 0, pois se cancelam)
+  * scee_comp_nao_isento = Valor R$ total da linha "Parc. Inj. s/ Desc. - GD2" (positivo — cobrado sobre a injeção)
+    Exemplo: "Parc. Inj. s/ Desc. - GD2 (kWh) 896,70 ... 241,24" → scee_comp_nao_isento = 241.24
+  * scee_beneficio_bruto = Valor R$ total da linha "Benefício Tarifário Bruto SCEE" (último número da linha)
+    Exemplo: "Benefício Tarifário Bruto SCEE 19,07 105,42 484,61" → scee_beneficio_bruto = 484.61
+  * scee_beneficio_liquido = valor da linha "Benefício Tarifário Líquido SCEE" (NEGATIVO)
+    Exemplo: "Benefício Tarifário Líquido SCEE -360,12" → scee_beneficio_liquido = -360.12
+  Verificação: scee_comp_nao_isento + scee_beneficio_bruto + scee_beneficio_liquido deve ser positivo
+    (= custo líquido da compensação para a distribuidora manter)
+
+- Para faturas CEMIG: procure pelos itens SCEE na discriminação de serviços
 - Para faturas LIGHT (Light S.A. — RJ):
   * consumo_kwh = coluna "Consumo kWh" da tabela do medidor (linha "Energia kWh" / "Tarifa Convencional")
     — NUNCA use o consumo líquido da seção GD; use sempre o consumo total do quadro de leitura do medidor
