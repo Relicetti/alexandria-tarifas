@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Revisar Extrações{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">📋 Revisar Faturas Extraídas</h4>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge bg-warning text-dark fs-6">{{ pendentes|length }} pendente(s)</span>
+    <button class="btn btn-primary" id="btn-trigger" onclick="triggerDownload()">
+      ▶ Iniciar Download
+    </button>
+  </div>
+</div>
+<div id="trigger-status" class="alert alert-info d-none mb-3"></div>
+
+{% if pendentes %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Aguardando revisão</strong>
+    <button class="btn btn-success btn-sm" onclick="aprovarTodos()">✓ Aprovar todos</button>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle" id="tbl-pendentes">
+      <thead>
+        <tr>
+          <th>Distribuidora</th>
+          <th>Mês Ref.</th>
+          <th>Modalidade</th>
+          <th>GD</th>
+          <th>Usinas</th>
+          <th class="text-end">Tar. Geração</th>
+          <th class="text-end">Tar. Dist.</th>
+          <th class="text-end">Tar. Comp.</th>
+          <th class="text-center">Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pendentes %}
+        <tr id="row-{{ p.id }}">
+          <td><strong>{{ p.distribuidora }}</strong></td>
+          <td>{{ p.mes_ref }}</td>
+          <td>{{ p.modalidade }}</td>
+          <td>
+            {% if p.tipo_gd == 'GD2' %}
+              <span class="badge bg-primary">GD2</span>
+            {% else %}
+              <span class="badge bg-secondary">GD1</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ p.usinas }}</small></td>
+          <td class="text-end font-monospace">
+            {% if p.tarifa_geracao %}{{ "%.6f"|format(p.tarifa_geracao) }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end font-monospace">
+            {% if p.tarifa_dist %}{{ "%.6f"|format(p.tarifa_dist) }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end font-monospace">
+            {% if p.tarifa_comp %}{{ "%.6f"|format(p.tarifa_comp) }}{% else %}—{% endif %}
+          </td>
+          <td class="text-center">
+            <button class="btn btn-success btn-sm me-1" onclick="acao({{ p.id }}, 'aprovar')">✓</button>
+            <button class="btn btn-danger btn-sm" onclick="acao({{ p.id }}, 'rejeitar')">✗</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-success">Nenhuma fatura pendente de revisão.</div>
+{% endif %}
+
+{% if aprovados %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-success text-white">
+    <strong>✓ Aprovadas — aguardando preenchimento no LexDash ({{ aprovados|length }})</strong>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Distribuidora</th>
+          <th>Mês Ref.</th>
+          <th>Modalidade</th>
+          <th>GD</th>
+          <th>Usinas</th>
+          <th class="text-end">Tar. Geração</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in aprovados %}
+        <tr>
+          <td>{{ p.distribuidora }}</td>
+          <td>{{ p.mes_ref }}</td>
+          <td>{{ p.modalidade }}</td>
+          <td>{{ p.tipo_gd }}</td>
+          <td><small class="text-muted">{{ p.usinas }}</small></td>
+          <td class="text-end font-monospace">
+            {% if p.tarifa_geracao %}{{ "%.6f"|format(p.tarifa_geracao) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer text-muted small">
+    Rode <code>python usinas/preencher_lexdash.py</code> pra preencher o grid automaticamente.
+  </div>
+</div>
+{% endif %}
+
+{% if preenchidos %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <strong class="text-muted">Preenchidas no LexDash ({{ preenchidos|length }})</strong>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 text-muted align-middle">
+      <thead>
+        <tr>
+          <th>Distribuidora</th><th>Mês</th><th>Modalidade</th><th>GD</th><th class="text-end">Tar. Geração</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in preenchidos %}
+        <tr>
+          <td>{{ p.distribuidora }}</td>
+          <td>{{ p.mes_ref }}</td>
+          <td>{{ p.modalidade }}</td>
+          <td>{{ p.tipo_gd }}</td>
+          <td class="text-end font-monospace">
+            {% if p.tarifa_geracao %}{{ "%.6f"|format(p.tarifa_geracao) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+async function triggerDownload() {
+  const btn = document.getElementById('btn-trigger');
+  const status = document.getElementById('trigger-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Aguardando agente local...';
+  const res = await fetch('/api/trigger-download', {method: 'POST'});
+  if (res.ok) {
+    status.className = 'alert alert-success mb-3';
+    status.textContent = '✓ Sinal enviado! O agente local vai iniciar o download em instantes.';
+    status.classList.remove('d-none');
+    setTimeout(() => location.reload(), 8000);
+  } else {
+    btn.disabled = false;
+    btn.textContent = '▶ Iniciar Download';
+    status.className = 'alert alert-danger mb-3';
+    status.textContent = 'Erro ao enviar sinal.';
+    status.classList.remove('d-none');
+  }
+}
+
+async function acao(id, tipo) {
+  const row = document.getElementById('row-' + id);
+  const res = await fetch(`/api/pendentes/${id}/${tipo}`, {method: 'POST'});
+  if (res.ok) {
+    row.style.opacity = '0.4';
+    setTimeout(() => { row.remove(); location.reload(); }, 600);
+  }
+}
+
+async function aprovarTodos() {
+  const rows = document.querySelectorAll('#tbl-pendentes tbody tr');
+  for (const row of rows) {
+    const id = row.id.replace('row-', '');
+    await fetch(`/api/pendentes/${id}/aprovar`, {method: 'POST'});
+    row.style.opacity = '0.4';
+  }
+  setTimeout(() => location.reload(), 800);
+}
+</script>
+{% endblock %}

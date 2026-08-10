@@ -339,6 +339,9 @@ def init_db():
             if curto != row["distribuidora"]:
                 conn.execute("UPDATE faturas SET distribuidora=? WHERE id=?", (curto, row["id"]))
 
+    init_tarifas_gerador()
+    init_pendentes()
+
 
 # Colunas salvas/lidas no formulário
 _INPUT_COLS = [
@@ -508,6 +511,81 @@ def get_tarifas_gerador(distribuidora=None, mes=None):
 def deletar_tarifa_gerador(id):
     with get_conn() as conn:
         conn.execute("DELETE FROM tarifas_gerador WHERE id=?", (id,))
+
+
+# ---------------------------------------------------------------------------
+# Faturas pendentes de revisão (extraídas pelo script, aguardando aprovação)
+# ---------------------------------------------------------------------------
+
+def get_config(chave: str, padrao=None):
+    with get_conn() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT)")
+        row = conn.execute("SELECT valor FROM config WHERE chave=?", (chave,)).fetchone()
+        return row["valor"] if row else padrao
+
+
+def set_config(chave: str, valor: str):
+    with get_conn() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT)")
+        conn.execute("INSERT INTO config (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor",
+                     (chave, valor))
+
+
+def init_pendentes():
+    with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS faturas_pendentes (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                distribuidora   TEXT NOT NULL,
+                mes_ref         TEXT NOT NULL,   -- "ago. de 2026"
+                mes_lex         TEXT NOT NULL,   -- "08-2026" (formato LexDash)
+                modalidade      TEXT NOT NULL,
+                tipo_gd         TEXT NOT NULL,
+                usinas          TEXT NOT NULL,   -- JSON list de IDs, ex: "[5, 6]"
+                tarifa_geracao  REAL,
+                tarifa_dist     REAL,
+                tarifa_comp     REAL,
+                pdf_path        TEXT,
+                status          TEXT NOT NULL DEFAULT 'pendente',
+                criado_em       DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+
+def salvar_pendente(data: dict) -> int:
+    cols = ["distribuidora","mes_ref","mes_lex","modalidade","tipo_gd",
+            "usinas","tarifa_geracao","tarifa_dist","tarifa_comp","pdf_path"]
+    vals = [data.get(c) for c in cols]
+    with get_conn() as conn:
+        cur = conn.execute(
+            f"INSERT INTO faturas_pendentes ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})",
+            vals
+        )
+        return cur.lastrowid
+
+
+def get_pendentes(status="pendente"):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM faturas_pendentes WHERE status=? ORDER BY criado_em DESC",
+            (status,)
+        ).fetchall()
+    return rows
+
+
+def aprovar_pendente(id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE faturas_pendentes SET status='aprovado' WHERE id=?", (id,))
+
+
+def rejeitar_pendente(id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE faturas_pendentes SET status='rejeitado' WHERE id=?", (id,))
+
+
+def marcar_preenchido(id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE faturas_pendentes SET status='preenchido' WHERE id=?", (id,))
 
 
 # Campos cuja variação mês-a-mês é monitorada (ANEEL só costuma reajustar

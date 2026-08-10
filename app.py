@@ -767,6 +767,96 @@ def admin_recover_faturas():
         return jsonify({"ok": True, "recovered": recovered, "faturas_old": old_count, "cols_copied": len(shared)})
 
 
+# ---------------------------------------------------------------------------
+# Revisão de faturas pendentes (extraídas pelo script local)
+# ---------------------------------------------------------------------------
+
+@app.route("/revisar")
+def revisar():
+    from flask import jsonify
+    pendentes  = db.get_pendentes("pendente")
+    aprovados  = db.get_pendentes("aprovado")
+    preenchidos = db.get_pendentes("preenchido")
+    return render_template(
+        "revisar.html",
+        pendentes=pendentes,
+        aprovados=aprovados,
+        preenchidos=preenchidos,
+    )
+
+
+@app.route("/api/trigger-download", methods=["POST"])
+def trigger_download():
+    from flask import jsonify
+    from datetime import datetime
+    db.set_config("trigger_download", datetime.utcnow().isoformat())
+    return jsonify({"ok": True})
+
+
+@app.route("/api/trigger-download/status")
+def trigger_status():
+    from flask import jsonify
+    val = db.get_config("trigger_download")
+    return jsonify({"trigger": val})
+
+
+@app.route("/api/pendentes/add", methods=["POST"])
+def pendentes_add():
+    """Recebe lista de faturas extraídas pelo script local."""
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    data = request.get_json(force=True)
+    if not isinstance(data, list):
+        data = [data]
+    ids = []
+    for item in data:
+        try:
+            ids.append(db.salvar_pendente(item))
+        except Exception as e:
+            return jsonify({"erro": str(e)}), 400
+    return jsonify({"ok": True, "ids": ids})
+
+
+@app.route("/api/pendentes/<int:id>/aprovar", methods=["POST"])
+def pendente_aprovar(id):
+    from flask import jsonify
+    db.aprovar_pendente(id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/pendentes/<int:id>/rejeitar", methods=["POST"])
+def pendente_rejeitar(id):
+    from flask import jsonify
+    db.rejeitar_pendente(id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/pendentes/aprovados")
+def pendentes_aprovados():
+    """Retorna lista de itens aprovados aguardando preenchimento no LexDash."""
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    rows = db.get_pendentes("aprovado")
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/pendentes/<int:id>/preenchido", methods=["POST"])
+def pendente_preenchido(id):
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    db.marcar_preenchido(id)
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
