@@ -62,16 +62,14 @@
           </td>
           <td class="text-center">
             <button class="btn btn-success btn-sm me-1" title="Aprovar" onclick="acao({{ p.id }}, 'aprovar')">✓</button>
-            <button class="btn btn-outline-secondary btn-sm me-1" title="Editar e aprovar"
-              onclick="abrirEditar(
-                {{ p.id }},
-                {{ p.tarifa_geracao|tojson }},
-                {{ p.tarifa_dist|tojson }},
-                {{ p.tarifa_comp|tojson }},
-                {{ p.pdf_path|tojson }},
-                {{ p.distribuidora|tojson }},
-                {{ p.mes_ref|tojson }}
-              )">✎</button>
+            <button class="btn btn-outline-secondary btn-sm me-1 btn-editar" title="Editar e aprovar"
+              data-id="{{ p.id }}"
+              data-tg="{{ p.tarifa_geracao or '' }}"
+              data-td="{{ p.tarifa_dist or '' }}"
+              data-tc="{{ p.tarifa_comp or '' }}"
+              data-pdf="{{ p.pdf_path or '' }}"
+              data-dist="{{ p.distribuidora }}"
+              data-mes="{{ p.mes_ref }}">✎</button>
             <button class="btn btn-danger btn-sm" title="Rejeitar" onclick="acao({{ p.id }}, 'rejeitar')">✗</button>
           </td>
         </tr>
@@ -219,6 +217,21 @@
 <script>
 let _editId = null;
 let _editPdfPath = '';
+
+// Delegação: captura cliques em qualquer botão .btn-editar
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn-editar');
+  if (!btn) return;
+  abrirEditar(
+    btn.dataset.id,
+    btn.dataset.tg || null,
+    btn.dataset.td || null,
+    btn.dataset.tc || null,
+    btn.dataset.pdf || null,
+    btn.dataset.dist,
+    btn.dataset.mes
+  );
+});
 
 async function triggerDownload() {
   const btn = document.getElementById('btn-trigger');
