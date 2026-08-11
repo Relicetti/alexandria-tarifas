@@ -22,6 +22,13 @@ from concessionarias import CONCESSIONARIAS, normalizar_distribuidora
 app = Flask(__name__)
 app.secret_key = "alexandria-tarifas-2024"
 
+# Timestamp capturado na inicialização do processo — reflete o momento do deploy
+_DEPLOY_TS = datetime.now(_TZ_SP).strftime("%d/%m/%Y %H:%M")
+
+@app.context_processor
+def _inject_deploy_ts():
+    return {"deploy_ts": _DEPLOY_TS}
+
 db.init_db()
 
 
@@ -871,6 +878,37 @@ def trigger_status():
     from flask import jsonify
     val = db.get_config("trigger_download")
     return jsonify({"trigger": val})
+
+
+@app.route("/api/pendentes/<int:id>")
+def pendente_get(id):
+    """Retorna dados de um pendente (usado pelo agente local para re-extração)."""
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    p = db.get_pendente(id)
+    if not p:
+        return jsonify({"erro": "não encontrado"}), 404
+    return jsonify(dict(p))
+
+
+@app.route("/api/pendentes/<int:id>/set-extraido", methods=["POST"])
+def pendente_set_extraido(id):
+    """Atualiza extraido_json de um pendente (após re-extração pelo agente local)."""
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    data = request.get_json(force=True) or {}
+    extraido = data.get("extraido_json", {})
+    conn = db._get_conn()
+    conn.execute("UPDATE faturas_pendentes SET extraido_json=? WHERE id=?",
+                 (json.dumps(extraido), id))
+    conn.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/pendentes/add", methods=["POST"])
