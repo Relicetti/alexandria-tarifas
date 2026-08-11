@@ -62,7 +62,11 @@
           </td>
           <td class="text-center">
             <button class="btn btn-success btn-sm me-1" title="Aprovar" onclick="acao({{ p.id }}, 'aprovar')">✓</button>
-            <button class="btn btn-outline-secondary btn-sm me-1 btn-editar" title="Editar e aprovar"
+            {% if p.pdf_path %}
+            <a class="btn btn-outline-primary btn-sm me-1" title="Abrir fatura PDF"
+               href="http://localhost:5002/pdf?path={{ p.pdf_path | urlencode }}" target="_blank">📄</a>
+            {% endif %}
+            <button class="btn btn-outline-secondary btn-sm me-1 btn-editar" title="Editar tarifas"
               data-id="{{ p.id }}"
               data-tg="{{ p.tarifa_geracao or '' }}"
               data-td="{{ p.tarifa_dist or '' }}"
