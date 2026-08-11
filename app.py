@@ -806,8 +806,11 @@ def revisar_editar(id):
         flash("Pendente não encontrado.", "danger")
         return redirect(url_for("revisar"))
 
+    # Converte sqlite3.Row para dict para facilitar manipulação
+    p = dict(pendente)
+
     # Monta o dict extraido a partir do JSON completo (se disponível) ou dos campos básicos
-    extraido_raw = pendente["extraido_json"]
+    extraido_raw = p.get("extraido_json")
     if extraido_raw:
         try:
             extraido = json.loads(extraido_raw)
@@ -817,13 +820,12 @@ def revisar_editar(id):
         extraido = {}
 
     # Garante campos mínimos no extraido
-    extraido.setdefault("distribuidora", pendente["distribuidora"])
-    extraido.setdefault("mes_referencia", pendente.get("mes_lex", "").replace("-", "-") or "")
-    extraido.setdefault("tarifa_distribuidora_input", pendente["tarifa_geracao"])
-    extraido.setdefault("tarifa_compensada_input", pendente["tarifa_comp"])
+    extraido.setdefault("distribuidora", p.get("distribuidora", ""))
+    extraido.setdefault("tarifa_distribuidora_input", p.get("tarifa_geracao"))
+    extraido.setdefault("tarifa_compensada_input", p.get("tarifa_comp"))
 
-    # Converte mes_lex "08-2026" → "2026-08" para o campo type="month"
-    mes_lex = pendente.get("mes_lex", "")
+    # Converte mes_lex "08-2026" → "2026-08-01" para o campo type="month"
+    mes_lex = p.get("mes_lex", "")
     if mes_lex and "-" in mes_lex:
         partes = mes_lex.split("-")
         if len(partes) == 2:
