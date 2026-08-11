@@ -31,11 +31,8 @@ def _saidas(tarifa_dist, tarifa_comp, tarifa_bruta_inj,
     desconto_real  = desconto_final / valor_fat_sem if valor_fat_sem else 0.0
     desconto_ref   = desconto_base * inj / consumo if (consumo and desconto_ref_disponivel) else None
 
-    # tarifa_geracao_est: ignora impostos_com_desconto (fator fixo = 1.0)
-    vger_est      = (tarifa_bruta_inj - (tarifa_dist - tarifa_comp)) * inj
-    vfat_com_est  = conc_sem if vger_est == 0 else conc_com + vger_est
-    dr_est        = (conc_sem - vfat_com_est) / conc_sem if conc_sem else 0.0
-    tarifa_geracao_est = (tarifa_comp + (tarifa_b_inj if cobra_band else 0.0)) * (1 - dr_est)
+    # tarifa_geracao_est: usa desconto bruto, imune a impostos_com_desconto
+    tarifa_geracao_est = (tarifa_comp + (tarifa_b_inj if cobra_band else 0.0)) * (1 - desconto)
 
     return {
         "tarifa_distribuidora": round(tarifa_dist, 6),

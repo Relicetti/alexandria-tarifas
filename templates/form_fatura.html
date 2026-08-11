@@ -702,11 +702,8 @@ function calcPreview() {
   const tem_ref = !['NEOENERGIA','CEMIG','BRASILIA'].includes(grupo);
 
   document.getElementById('preview-card').style.display = '';
-  // tarifa_geracao_est: ignora impostos_com_desconto (fator = 1.0 fixo)
-  const vger_est     = (tb_bruta - (td - tc)) * inj;
-  const vfat_com_est = vger_est === 0 ? conc_sem : conc_com + vger_est;
-  const dr_est       = conc_sem ? (conc_sem - vfat_com_est) / conc_sem : 0;
-  const tge = (tc + (cobra ? tb_inj : 0)) * (1 - dr_est);
+  // tarifa_geracao_est: usa desconto bruto (não é afetada por impostos_com_desconto nem DR calculado)
+  const tge = (tc + (cobra ? tb_inj : 0)) * (1 - desc_usar);
   document.getElementById('res-td').textContent   = 'R$ ' + td.toFixed(4);
   document.getElementById('res-tc').textContent   = 'R$ ' + tc.toFixed(4);
   document.getElementById('res-tg').textContent   = 'R$ ' + tg.toFixed(4);
