@@ -798,6 +798,25 @@ def revisar():
     )
 
 
+def _inferir_grupo(distribuidora: str) -> str:
+    """Inferência heurística do grupo de layout a partir do nome da distribuidora."""
+    d = (distribuidora or "").lower()
+    if "equatorial" in d or "ceee" in d:
+        return "EQT"
+    if "neoenergia" in d or "coelba" in d or "cosern" in d or "celpe" in d or "elektro" in d:
+        return "NEOENERGIA"
+    if "energisa" in d:
+        return "ENERGISA"
+    if "light" in d:
+        return "LIGHT"
+    if "cemig" in d:
+        return "CEMIG"
+    if "brasilia" in d or "ceb-dis" in d or "ceb " in d:
+        return "BRASILIA"
+    # CPFL, RGE, EDP, Celesc, Copel, Cocel, cooperativas → GER
+    return "GER"
+
+
 @app.route("/revisar/<int:id>/editar")
 def revisar_editar(id):
     """Redireciona para o form_fatura pré-preenchido com dados do pendente."""
@@ -823,6 +842,9 @@ def revisar_editar(id):
     extraido.setdefault("distribuidora", p.get("distribuidora", ""))
     extraido.setdefault("tarifa_distribuidora_input", p.get("tarifa_geracao"))
     extraido.setdefault("tarifa_compensada_input", p.get("tarifa_comp"))
+    # Infere grupo para que aplicarGrupo() exiba os campos corretos no form_fatura
+    if not extraido.get("grupo"):
+        extraido["grupo"] = _inferir_grupo(p.get("distribuidora", ""))
 
     # Converte mes_lex "08-2026" → "2026-08-01" para o campo type="month"
     mes_lex = p.get("mes_lex", "")
