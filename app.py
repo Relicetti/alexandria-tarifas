@@ -315,6 +315,22 @@ def form_fatura(id=None):
                            pendente_id=pendente_id)
 
 
+@app.route("/faturas/<int:id>/duplicar", methods=["POST"])
+def duplicar_fatura(id):
+    """Cria uma cópia da fatura e abre o formulário de edição para ajustar o desconto."""
+    original = db.get_fatura(id)
+    if not original:
+        flash("Fatura não encontrada.", "danger")
+        return redirect(url_for("index"))
+    data = dict(original)
+    # Remove campos gerados automaticamente para criar como nova
+    novo_id = data.pop("id", None)
+    data.pop("criado_em", None)
+    novo_id = db.salvar_fatura(data)
+    flash("Fatura duplicada. Ajuste o desconto e salve.", "info")
+    return redirect(url_for("form_fatura", id=novo_id))
+
+
 @app.route("/faturas/<int:id>/deletar", methods=["POST"])
 def deletar_fatura(id):
     fatura = db.get_fatura(id)

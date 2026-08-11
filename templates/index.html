@@ -165,8 +165,12 @@
               <td class="text-end text-muted small text-nowrap">
                 {{ f.criado_em[:16].replace('T',' ') if f.criado_em else '—' }}
               </td>
-              <td>
+              <td class="text-nowrap">
                 <a href="/faturas/{{ f.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
+                <form method="post" action="/faturas/{{ f.id }}/duplicar" class="d-inline"
+                      title="Duplicar fatura (para calcular com desconto diferente)">
+                  <button class="btn btn-sm btn-outline-secondary">⧉</button>
+                </form>
                 <form method="post" action="/faturas/{{ f.id }}/deletar" class="d-inline"
                       onsubmit="return confirm('Remover esta fatura?')">
                   <button class="btn btn-sm btn-outline-danger">×</button>
