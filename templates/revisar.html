@@ -66,14 +66,7 @@
             <a class="btn btn-outline-primary btn-sm me-1" title="Abrir fatura PDF"
                href="http://localhost:5002/pdf?path={{ p.pdf_path | urlencode }}" target="_blank">📄</a>
             {% endif %}
-            <button class="btn btn-outline-secondary btn-sm me-1 btn-editar" title="Editar tarifas"
-              data-id="{{ p.id }}"
-              data-tg="{{ p.tarifa_geracao or '' }}"
-              data-td="{{ p.tarifa_dist or '' }}"
-              data-tc="{{ p.tarifa_comp or '' }}"
-              data-pdf="{{ p.pdf_path or '' }}"
-              data-dist="{{ p.distribuidora }}"
-              data-mes="{{ p.mes_ref }}">✎</button>
+            <a href="/revisar/{{ p.id }}/editar" class="btn btn-outline-secondary btn-sm me-1" title="Editar tarifas">✎</a>
             <button class="btn btn-danger btn-sm" title="Rejeitar" onclick="acao({{ p.id }}, 'rejeitar')">✗</button>
           </td>
         </tr>
@@ -155,88 +148,8 @@
 </div>
 {% endif %}
 
-<!-- ─── Modal de Edição ─── -->
-<div class="modal fade" id="modalEditar" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">✎ Editar Tarifa — <span id="edit-titulo"></span></h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-
-        <!-- Link para a fatura PDF -->
-        <div class="mb-3 p-2 bg-light rounded border" id="pdf-box">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <div>
-              <div class="fw-semibold text-muted small mb-1">📄 Fatura base (para validação)</div>
-              <code id="edit-pdf-path" class="text-break" style="font-size:.8rem"></code>
-            </div>
-            <div class="d-flex gap-1 flex-shrink-0">
-              <button class="btn btn-sm btn-outline-secondary" onclick="copiarCaminho()" title="Copiar caminho">
-                📋
-              </button>
-              <a id="link-pdf-explorer" class="btn btn-sm btn-outline-primary" href="#" target="_blank"
-                 onclick="abrirNoExplorer(event)" title="Abrir pasta no Explorer">
-                🗂
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Campos editáveis -->
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Tar. Geração <span class="text-danger">*</span></label>
-            <input type="number" step="0.000001" class="form-control font-monospace" id="edit-tarifa-geracao"
-                   placeholder="ex: 0.768231">
-            <div class="form-text">R$/kWh — valor principal a preencher no LexDash</div>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Tar. Distribuição</label>
-            <input type="number" step="0.000001" class="form-control font-monospace" id="edit-tarifa-dist"
-                   placeholder="ex: 1.309302">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Tar. Compensada</label>
-            <input type="number" step="0.000001" class="form-control font-monospace" id="edit-tarifa-comp"
-                   placeholder="ex: 0.500000">
-          </div>
-        </div>
-
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-outline-primary" onclick="salvarEdicao(false)">
-          💾 Salvar
-        </button>
-        <button type="button" class="btn btn-success" onclick="salvarEdicao(true)">
-          ✓ Salvar e Aprovar
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
-let _editId = null;
-let _editPdfPath = '';
-
-// Delegação: captura cliques em qualquer botão .btn-editar
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('.btn-editar');
-  if (!btn) return;
-  abrirEditar(
-    btn.dataset.id,
-    btn.dataset.tg || null,
-    btn.dataset.td || null,
-    btn.dataset.tc || null,
-    btn.dataset.pdf || null,
-    btn.dataset.dist,
-    btn.dataset.mes
-  );
-});
-
 async function triggerDownload() {
   const btn = document.getElementById('btn-trigger');
   const status = document.getElementById('trigger-status');
@@ -296,48 +209,5 @@ function abrirEditar(id, tg, td, tc, pdfPath, dist, mes) {
   new bootstrap.Modal(document.getElementById('modalEditar')).show();
 }
 
-async function salvarEdicao(aprovar) {
-  const payload = {
-    tarifa_geracao: document.getElementById('edit-tarifa-geracao').value || null,
-    tarifa_dist:    document.getElementById('edit-tarifa-dist').value || null,
-    tarifa_comp:    document.getElementById('edit-tarifa-comp').value || null,
-    aprovar:        aprovar,
-  };
-  const res = await fetch(`/api/pendentes/${_editId}/atualizar`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload),
-  });
-  if (res.ok) {
-    bootstrap.Modal.getInstance(document.getElementById('modalEditar')).hide();
-    setTimeout(() => location.reload(), 300);
-  } else {
-    alert('Erro ao salvar. Tente novamente.');
-  }
-}
-
-async function copiarCaminho() {
-  try {
-    await navigator.clipboard.writeText(_editPdfPath);
-    const btn = event.currentTarget;
-    btn.textContent = '✓';
-    setTimeout(() => { btn.textContent = '📋'; }, 1500);
-  } catch(e) {
-    prompt('Copie o caminho:', _editPdfPath);
-  }
-}
-
-function abrirNoExplorer(e) {
-  e.preventDefault();
-  // Copia o caminho para área de transferência e instrui o usuário
-  if (_editPdfPath) {
-    const pasta = _editPdfPath.replace(/[^\\\/]*$/, '');  // remove o nome do arquivo
-    navigator.clipboard.writeText(pasta).then(() => {
-      alert(`Pasta copiada para a área de transferência:\n${pasta}\n\nCole no Explorer (Windows+E, depois Ctrl+V na barra de endereços).`);
-    }).catch(() => {
-      prompt('Pasta do PDF:', pasta);
-    });
-  }
-}
 </script>
 {% endblock %}

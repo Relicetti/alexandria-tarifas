@@ -564,6 +564,13 @@ def salvar_pendente(data: dict) -> int:
         return cur.lastrowid
 
 
+def get_pendente(id: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM faturas_pendentes WHERE id=?", (id,)
+        ).fetchone()
+
+
 def get_pendentes(status="pendente"):
     with get_conn() as conn:
         rows = conn.execute(

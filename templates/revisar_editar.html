@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Revisar Tarifa — {{ p.distribuidora }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">📋 Revisar Tarifa Extraída</h4>
+  <a href="/revisar" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+</div>
+
+<form method="post">
+<div class="row g-4">
+
+  <!-- ── Coluna esquerda ── -->
+  <div class="col-md-6">
+
+    <!-- Identificação -->
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">Identificação</div>
+      <div class="card-body">
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <label class="form-label">Distribuidora</label>
+            <input class="form-control" value="{{ p.distribuidora }}" readonly>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Mês de Referência</label>
+            <input class="form-control" value="{{ p.mes_ref }}" readonly>
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <label class="form-label">Modalidade</label>
+            <input class="form-control" value="{{ p.modalidade }}" readonly>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Tipo GD</label>
+            <input class="form-control" value="{{ p.tipo_gd }}" readonly>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Usinas</label>
+          <input class="form-control" value="{{ p.usinas }}" readonly>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tarifas (editáveis) -->
+    <div class="card mb-3 border-primary">
+      <div class="card-header fw-semibold text-primary">Tarifas Extraídas — confirme com a fatura</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tarifa de Geração (R$/kWh) <span class="text-danger">*</span></label>
+          <input type="number" step="0.000001" name="tarifa_geracao" class="form-control font-monospace fs-5"
+                 value="{{ p.tarifa_geracao or '' }}"
+                 placeholder="0.000000" required>
+          <div class="form-text">Valor principal que será cadastrado no LexDash</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">Tarifa Distribuidora (R$/kWh)</label>
+            <input type="number" step="0.000001" name="tarifa_dist" class="form-control font-monospace"
+                   value="{{ p.tarifa_dist or '' }}" placeholder="0.000000">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Tarifa Compensada (R$/kWh)</label>
+            <input type="number" step="0.000001" name="tarifa_comp" class="form-control font-monospace"
+                   value="{{ p.tarifa_comp or '' }}" placeholder="0.000000">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Coluna direita: fatura PDF ── -->
+  <div class="col-md-6">
+    <div class="card mb-3 h-100" style="min-height:500px">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">📄 Fatura — {{ p.distribuidora }} {{ p.mes_ref }}</span>
+        {% if pdf_url %}
+        <a href="{{ pdf_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">↗ Abrir em nova aba</a>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if pdf_url %}
+        <iframe src="{{ pdf_url }}" width="100%" height="600px" style="border:none; border-radius:0 0 .375rem .375rem"></iframe>
+        {% else %}
+        <div class="d-flex align-items-center justify-content-center h-100 text-muted p-4">
+          <div class="text-center">
+            <div style="font-size:3rem">📄</div>
+            <div>PDF não disponível</div>
+            {% if p.pdf_path %}
+            <small class="d-block mt-2 font-monospace text-break">{{ p.pdf_path }}</small>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+
+<!-- Botões de ação -->
+<div class="d-flex gap-2 mt-2 pb-4">
+  <a href="/revisar" class="btn btn-outline-secondary">Cancelar</a>
+  <button type="submit" name="acao" value="salvar" class="btn btn-outline-primary">
+    💾 Salvar
+  </button>
+  <button type="submit" name="acao" value="aprovar" class="btn btn-success btn-lg px-5">
+    ✓ Salvar e Aprovar
+  </button>
+</div>
+
+</form>
+{% endblock %}

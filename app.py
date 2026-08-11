@@ -785,6 +785,37 @@ def revisar():
     )
 
 
+@app.route("/revisar/<int:id>/editar", methods=["GET", "POST"])
+def revisar_editar(id):
+    """Página completa para editar e aprovar um pendente de revisão."""
+    pendente = db.get_pendente(id)
+    if not pendente:
+        flash("Pendente não encontrado.", "danger")
+        return redirect(url_for("revisar"))
+
+    if request.method == "POST":
+        acao = request.form.get("acao", "salvar")
+        conn = db._get_conn()
+        campos = {}
+        for campo in ("tarifa_geracao", "tarifa_dist", "tarifa_comp"):
+            v = request.form.get(campo, "").strip()
+            campos[campo] = float(v.replace(",", ".")) if v else None
+        if campos:
+            sets = ", ".join(f"{k}=?" for k in campos)
+            conn.execute(f"UPDATE faturas_pendentes SET {sets} WHERE id=?", (*campos.values(), id))
+            conn.commit()
+        if acao == "aprovar":
+            db.aprovar_pendente(id)
+            flash(f"✓ Tarifa aprovada: {pendente['distribuidora']} {pendente['mes_ref']}", "success")
+        else:
+            flash("Valores salvos.", "success")
+        return redirect(url_for("revisar"))
+
+    pdf_path = pendente["pdf_path"] or ""
+    pdf_url = f"http://localhost:5002/pdf?path={pdf_path}" if pdf_path else ""
+    return render_template("revisar_editar.html", p=pendente, pdf_url=pdf_url)
+
+
 @app.route("/api/trigger-download", methods=["POST"])
 def trigger_download():
     from flask import jsonify
