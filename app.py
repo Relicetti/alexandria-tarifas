@@ -820,6 +820,26 @@ def pendentes_add():
     return jsonify({"ok": True, "ids": ids})
 
 
+@app.route("/api/pendentes/<int:id>/atualizar", methods=["POST"])
+def pendente_atualizar(id):
+    """Atualiza valores extraídos (edição manual) e opcionalmente aprova."""
+    from flask import jsonify
+    data = request.get_json(force=True) or {}
+    conn = db._get_conn()
+    campos = {}
+    for campo in ("tarifa_geracao", "tarifa_dist", "tarifa_comp"):
+        if campo in data:
+            v = data[campo]
+            campos[campo] = float(v) if v not in (None, "", "null") else None
+    if campos:
+        sets = ", ".join(f"{k}=?" for k in campos)
+        conn.execute(f"UPDATE faturas_pendentes SET {sets} WHERE id=?", (*campos.values(), id))
+        conn.commit()
+    if data.get("aprovar"):
+        db.aprovar_pendente(id)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/pendentes/<int:id>/aprovar", methods=["POST"])
 def pendente_aprovar(id):
     from flask import jsonify
