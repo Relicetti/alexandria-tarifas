@@ -517,6 +517,10 @@
           <div class="fs-5 fw-bold text-primary" id="res-tg">—</div>
         </div>
         <div class="col">
+          <div class="text-muted small">Tarifa Ger. Est.</div>
+          <div class="fs-5 fw-bold text-secondary" id="res-tge" title="T_compensada × (1 − Desconto Real)">—</div>
+        </div>
+        <div class="col">
           <div class="text-muted small">Desconto Real</div>
           <div class="fs-5 fw-bold text-success" id="res-dr">—</div>
         </div>
@@ -698,9 +702,11 @@ function calcPreview() {
   const tem_ref = !['NEOENERGIA','CEMIG','BRASILIA'].includes(grupo);
 
   document.getElementById('preview-card').style.display = '';
+  const tge = tc * (1 - dr);
   document.getElementById('res-td').textContent   = 'R$ ' + td.toFixed(4);
   document.getElementById('res-tc').textContent   = 'R$ ' + tc.toFixed(4);
   document.getElementById('res-tg').textContent   = 'R$ ' + tg.toFixed(4);
+  document.getElementById('res-tge').textContent  = 'R$ ' + tge.toFixed(4);
   document.getElementById('res-dr').textContent   = (dr * 100).toFixed(2) + '%';
   document.getElementById('col-dref').style.display = tem_ref ? '' : 'none';
   document.getElementById('res-dref').textContent = (dref * 100).toFixed(2) + '%';

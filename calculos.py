@@ -31,10 +31,13 @@ def _saidas(tarifa_dist, tarifa_comp, tarifa_bruta_inj,
     desconto_real  = desconto_final / valor_fat_sem if valor_fat_sem else 0.0
     desconto_ref   = desconto_base * inj / consumo if (consumo and desconto_ref_disponivel) else None
 
+    tarifa_geracao_est = tarifa_comp * (1 - desconto_real)
+
     return {
         "tarifa_distribuidora": round(tarifa_dist, 6),
         "tarifa_compensada":    round(tarifa_comp, 6),
         "tarifa_geracao":       round(tarifa_geracao, 6),
+        "tarifa_geracao_est":   round(tarifa_geracao_est, 6),
         "desconto_real":        round(desconto_real, 6),
         "desconto_ref":         round(desconto_ref, 6) if desconto_ref is not None else None,
     }
