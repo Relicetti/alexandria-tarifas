@@ -264,17 +264,29 @@ def form_fatura(id=None):
                 if existente:
                     db.salvar_fatura(data, existente["id"])
                     flash("Fatura existente atualizada.", "success")
-                    return redirect(url_for("index", mes=data["mes_referencia"]))
-            db.salvar_fatura(data, id)
-            flash("Fatura salva.", "success")
+                else:
+                    db.salvar_fatura(data, id)
+                    flash("Fatura salva.", "success")
+            else:
+                db.salvar_fatura(data, id)
+                flash("Fatura salva.", "success")
+            # Aprova o pendente se veio da tela de revisão
+            pendente_id = request.form.get("_pendente_id")
+            if pendente_id:
+                try:
+                    db.aprovar_pendente(int(pendente_id))
+                except Exception:
+                    pass
+                return redirect(url_for("revisar"))
             return redirect(url_for("index", mes=data["mes_referencia"]))
         except Exception as e:
             import traceback
             _log_debug(f"ERRO SALVAR: {e}\n{traceback.format_exc()}")
             flash(f"Erro no cálculo: {e}", "danger")
 
-    token    = request.args.get("_extr")
-    extraido = _carregar_extraido(token) if token else None
+    token      = request.args.get("_extr")
+    pendente_id = request.args.get("_pendente")
+    extraido   = _carregar_extraido(token) if token else None
     _log_debug(f"GET form_fatura: token={token} extraido={'SIM keys='+str(list(extraido.keys())) if extraido else 'NAO'}")
     mes_pre   = request.args.get("mes", mes_atual())
     grupo_pre = None
@@ -292,7 +304,8 @@ def form_fatura(id=None):
                            campos_grupo=CAMPOS_GRUPO,
                            grupos=db.GRUPOS,
                            concessionarias=CONCESSIONARIAS,
-                           extraido=extraido)
+                           extraido=extraido,
+                           pendente_id=pendente_id)
 
 
 @app.route("/faturas/<int:id>/deletar", methods=["POST"])
@@ -785,35 +798,40 @@ def revisar():
     )
 
 
-@app.route("/revisar/<int:id>/editar", methods=["GET", "POST"])
+@app.route("/revisar/<int:id>/editar")
 def revisar_editar(id):
-    """Página completa para editar e aprovar um pendente de revisão."""
+    """Redireciona para o form_fatura pré-preenchido com dados do pendente."""
     pendente = db.get_pendente(id)
     if not pendente:
         flash("Pendente não encontrado.", "danger")
         return redirect(url_for("revisar"))
 
-    if request.method == "POST":
-        acao = request.form.get("acao", "salvar")
-        conn = db._get_conn()
-        campos = {}
-        for campo in ("tarifa_geracao", "tarifa_dist", "tarifa_comp"):
-            v = request.form.get(campo, "").strip()
-            campos[campo] = float(v.replace(",", ".")) if v else None
-        if campos:
-            sets = ", ".join(f"{k}=?" for k in campos)
-            conn.execute(f"UPDATE faturas_pendentes SET {sets} WHERE id=?", (*campos.values(), id))
-            conn.commit()
-        if acao == "aprovar":
-            db.aprovar_pendente(id)
-            flash(f"✓ Tarifa aprovada: {pendente['distribuidora']} {pendente['mes_ref']}", "success")
-        else:
-            flash("Valores salvos.", "success")
-        return redirect(url_for("revisar"))
+    # Monta o dict extraido a partir do JSON completo (se disponível) ou dos campos básicos
+    extraido_raw = pendente["extraido_json"]
+    if extraido_raw:
+        try:
+            extraido = json.loads(extraido_raw)
+        except Exception:
+            extraido = {}
+    else:
+        extraido = {}
 
-    pdf_path = pendente["pdf_path"] or ""
-    pdf_url = f"http://localhost:5002/pdf?path={pdf_path}" if pdf_path else ""
-    return render_template("revisar_editar.html", p=pendente, pdf_url=pdf_url)
+    # Garante campos mínimos no extraido
+    extraido.setdefault("distribuidora", pendente["distribuidora"])
+    extraido.setdefault("mes_referencia", pendente.get("mes_lex", "").replace("-", "-") or "")
+    extraido.setdefault("tarifa_distribuidora_input", pendente["tarifa_geracao"])
+    extraido.setdefault("tarifa_compensada_input", pendente["tarifa_comp"])
+
+    # Converte mes_lex "08-2026" → "2026-08" para o campo type="month"
+    mes_lex = pendente.get("mes_lex", "")
+    if mes_lex and "-" in mes_lex:
+        partes = mes_lex.split("-")
+        if len(partes) == 2:
+            extraido["mes_referencia"] = f"{partes[1]}-{partes[0]}-01"
+
+    token = _salvar_extraido(extraido)
+    # Passa pendente_id para que o form_fatura possa aprovar após salvar
+    return redirect(url_for("form_fatura", _extr=token, _pendente=id))
 
 
 @app.route("/api/trigger-download", methods=["POST"])

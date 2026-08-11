@@ -8,12 +8,15 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">{{ 'Editar Fatura' if fatura else 'Nova Fatura' }}</h4>
-  <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+  <a href="{{ '/revisar' if pendente_id else '/' }}" class="btn btn-outline-secondary btn-sm">← Voltar</a>
 </div>
 
 <form method="post" id="formFatura">
   {% if extraido %}
   <textarea name="_extraido_json" style="display:none">{{ extraido | tojson }}</textarea>
+  {% endif %}
+  {% if pendente_id %}
+  <input type="hidden" name="_pendente_id" value="{{ pendente_id }}">
   {% endif %}
   <div class="row g-4">
 
@@ -526,8 +529,13 @@
   </div>
 
   <div class="d-flex gap-2">
+    {% if pendente_id %}
+    <button type="submit" class="btn btn-success px-5">✓ Salvar e Aprovar</button>
+    <a href="/revisar" class="btn btn-outline-secondary">Cancelar</a>
+    {% else %}
     <button type="submit" class="btn btn-primary px-5">Salvar</button>
     <a href="/" class="btn btn-outline-secondary">Cancelar</a>
+    {% endif %}
   </div>
 </form>
 

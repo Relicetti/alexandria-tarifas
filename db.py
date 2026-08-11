@@ -531,30 +531,39 @@ def set_config(chave: str, valor: str):
                      (chave, valor))
 
 
+def _migrar_pendentes(conn):
+    """Adiciona colunas novas que podem não existir em bancos antigos."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(faturas_pendentes)").fetchall()]
+    if "extraido_json" not in cols:
+        conn.execute("ALTER TABLE faturas_pendentes ADD COLUMN extraido_json TEXT")
+
+
 def init_pendentes():
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS faturas_pendentes (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 distribuidora   TEXT NOT NULL,
-                mes_ref         TEXT NOT NULL,   -- "ago. de 2026"
-                mes_lex         TEXT NOT NULL,   -- "08-2026" (formato LexDash)
+                mes_ref         TEXT NOT NULL,
+                mes_lex         TEXT NOT NULL,
                 modalidade      TEXT NOT NULL,
                 tipo_gd         TEXT NOT NULL,
-                usinas          TEXT NOT NULL,   -- JSON list de IDs, ex: "[5, 6]"
+                usinas          TEXT NOT NULL,
                 tarifa_geracao  REAL,
                 tarifa_dist     REAL,
                 tarifa_comp     REAL,
                 pdf_path        TEXT,
+                extraido_json   TEXT,
                 status          TEXT NOT NULL DEFAULT 'pendente',
                 criado_em       DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        _migrar_pendentes(conn)
 
 
 def salvar_pendente(data: dict) -> int:
     cols = ["distribuidora","mes_ref","mes_lex","modalidade","tipo_gd",
-            "usinas","tarifa_geracao","tarifa_dist","tarifa_comp","pdf_path"]
+            "usinas","tarifa_geracao","tarifa_dist","tarifa_comp","pdf_path","extraido_json"]
     vals = [data.get(c) for c in cols]
     with get_conn() as conn:
         cur = conn.execute(
