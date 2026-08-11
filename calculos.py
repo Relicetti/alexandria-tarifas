@@ -19,7 +19,7 @@ def _g(d, *keys, default=0.0):
 def _saidas(tarifa_dist, tarifa_comp, tarifa_bruta_inj,
             conc_com, conc_sem, inj, consumo,
             desconto_base, desconto_ref_disponivel, desconto,
-            impostos_com_desconto=False):
+            impostos_com_desconto=False, tarifa_b_inj=0.0, cobra_band=False):
     """Calcula os 5 outputs finais a partir dos valores intermediários."""
     fator = (1 - desconto) if impostos_com_desconto else 1.0
     valor_geracao = (tarifa_bruta_inj - (tarifa_dist - tarifa_comp) * fator) * inj
@@ -31,7 +31,7 @@ def _saidas(tarifa_dist, tarifa_comp, tarifa_bruta_inj,
     desconto_real  = desconto_final / valor_fat_sem if valor_fat_sem else 0.0
     desconto_ref   = desconto_base * inj / consumo if (consumo and desconto_ref_disponivel) else None
 
-    tarifa_geracao_est = tarifa_comp * (1 - desconto_real)
+    tarifa_geracao_est = (tarifa_comp + (tarifa_b_inj if cobra_band else 0.0)) * (1 - desconto_real)
 
     return {
         "tarifa_distribuidora": round(tarifa_dist, 6),
@@ -105,7 +105,8 @@ def calcular_GER(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_EQT(d):
@@ -130,7 +131,8 @@ def calcular_EQT(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_NEOENERGIA(d):
@@ -155,7 +157,8 @@ def calcular_NEOENERGIA(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_ENERGISA(d):
@@ -178,7 +181,8 @@ def calcular_ENERGISA(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_LIGHT(d):
@@ -204,7 +208,8 @@ def calcular_LIGHT(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=0.0, cobra_band=cobra)
 
 
 def calcular_CEMIG(d):
@@ -226,7 +231,8 @@ def calcular_CEMIG(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_BRASILIA(d):
@@ -247,7 +253,8 @@ def calcular_BRASILIA(d):
 
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
-                   impostos_com_desconto=bool(d.get('impostos_com_desconto')))
+                   impostos_com_desconto=bool(d.get('impostos_com_desconto')),
+                   tarifa_b_inj=0.0, cobra_band=cobra)
 
 
 # ── dispatcher ────────────────────────────────────────────────────────────────

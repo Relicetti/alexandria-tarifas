@@ -702,7 +702,7 @@ function calcPreview() {
   const tem_ref = !['NEOENERGIA','CEMIG','BRASILIA'].includes(grupo);
 
   document.getElementById('preview-card').style.display = '';
-  const tge = tc * (1 - dr);
+  const tge = (tc + (cobra ? tb_inj : 0)) * (1 - dr);
   document.getElementById('res-td').textContent   = 'R$ ' + td.toFixed(4);
   document.getElementById('res-tc').textContent   = 'R$ ' + tc.toFixed(4);
   document.getElementById('res-tg').textContent   = 'R$ ' + tg.toFixed(4);
