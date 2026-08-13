@@ -896,6 +896,20 @@ def trigger_status():
     return jsonify({"trigger": val})
 
 
+@app.route("/api/faturas/<int:id>")
+def api_fatura_get(id):
+    """Expõe dados de uma fatura como JSON (usado pelo agente local para gravar no LexDash)."""
+    from flask import jsonify
+    token = request.headers.get("X-Admin-Token", "")
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if expected and token != expected:
+        return jsonify({"erro": "Unauthorized"}), 401
+    f = db.get_fatura(id)
+    if not f:
+        return jsonify({"erro": "não encontrado"}), 404
+    return jsonify(dict(f))
+
+
 @app.route("/api/pendentes/<int:id>")
 def pendente_get(id):
     """Retorna dados de um pendente (usado pelo agente local para re-extração)."""

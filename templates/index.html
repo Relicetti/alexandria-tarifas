@@ -167,6 +167,8 @@
               </td>
               <td class="text-nowrap">
                 <a href="/faturas/{{ f.id }}/editar" class="btn btn-sm btn-outline-primary">Editar</a>
+                <button class="btn btn-sm btn-outline-success" title="Gravar no LexDash"
+                        onclick="gravarFatura({{ f.id }}, this)">🖨</button>
                 <form method="post" action="/faturas/{{ f.id }}/duplicar" class="d-inline"
                       title="Duplicar fatura (para calcular com desconto diferente)">
                   <button class="btn btn-sm btn-outline-secondary">⧉</button>
@@ -191,5 +193,76 @@
   <a href="/faturas/nova?mes={{ mes }}" class="btn btn-primary">Lançar primeira fatura</a>
 </div>
 {% endif %}
+
+<!-- Toast de status do Gravar -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100">
+  <div id="gravar-toast" class="toast align-items-center border-0" role="alert" data-bs-autohide="false">
+    <div class="d-flex">
+      <div class="toast-body" id="gravar-toast-msg">Gravando…</div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _gravarPoll = null;
+
+async function gravarFatura(faturaId, btn) {
+  const toastEl = document.getElementById('gravar-toast');
+  const msgEl   = document.getElementById('gravar-toast-msg');
+  const toast   = new bootstrap.Toast(toastEl, {autohide: false});
+
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  toastEl.className = 'toast align-items-center border-0 text-bg-warning';
+  msgEl.textContent = 'Abrindo LexDash…';
+  toast.show();
+
+  clearInterval(_gravarPoll);
+
+  const res = await fetch('http://localhost:5002/gravar-fatura', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({fatura_id: faturaId})
+  }).catch(() => null);
+
+  if (!res || !res.ok) {
+    const j = res ? await res.json().catch(() => ({})) : {};
+    toastEl.className = 'toast align-items-center border-0 text-bg-danger';
+    msgEl.textContent = '❌ ' + (j.msg || 'Servidor local não respondeu.');
+    btn.disabled = false;
+    btn.textContent = '🖨';
+    return;
+  }
+
+  _gravarPoll = setInterval(async () => {
+    try {
+      const s = await fetch('http://localhost:5002/gravar-lexdash/status').then(r => r.json());
+      if (s.estado === 'rodando') {
+        msgEl.textContent = '⏳ ' + (s.log || 'Processando…');
+        return;
+      }
+      clearInterval(_gravarPoll);
+      if (s.estado === 'ok') {
+        toastEl.className = 'toast align-items-center border-0 text-bg-success';
+        msgEl.textContent = '✓ Gravado no LexDash!';
+        btn.textContent = '✓';
+        btn.classList.replace('btn-outline-success', 'btn-success');
+      } else {
+        toastEl.className = 'toast align-items-center border-0 text-bg-danger';
+        msgEl.textContent = '❌ Erro: ' + (s.log || '').split('\n').pop();
+        btn.disabled = false;
+        btn.textContent = '🖨';
+      }
+    } catch {
+      clearInterval(_gravarPoll);
+      toastEl.className = 'toast align-items-center border-0 text-bg-danger';
+      msgEl.textContent = '❌ Servidor local parou de responder.';
+      btn.disabled = false;
+      btn.textContent = '🖨';
+    }
+  }, 2000);
+}
+</script>
 
 {% endblock %}
