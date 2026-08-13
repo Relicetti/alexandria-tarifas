@@ -66,7 +66,7 @@
             <a class="btn btn-outline-primary btn-sm me-1" title="Abrir fatura PDF"
                href="http://localhost:5002/pdf?path={{ p.pdf_path | urlencode }}" target="_blank">📄</a>
             {% endif %}
-            <a href="/revisar/{{ p.id }}/editar" class="btn btn-outline-secondary btn-sm me-1" title="Editar tarifas">✎</a>
+            <a href="http://localhost:5002/extrair-pendente?id={{ p.id }}" class="btn btn-outline-secondary btn-sm me-1" title="Extrair e editar fatura">✎</a>
             <button class="btn btn-danger btn-sm" title="Rejeitar" onclick="acao({{ p.id }}, 'rejeitar')">✗</button>
           </td>
         </tr>
@@ -81,8 +81,11 @@
 
 {% if aprovados %}
 <div class="card shadow-sm mb-4">
-  <div class="card-header bg-success text-white">
+  <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
     <strong>✓ Aprovadas — aguardando preenchimento no LexDash ({{ aprovados|length }})</strong>
+    <button class="btn btn-light btn-sm fw-semibold" id="btn-gravar" onclick="gravarLexDash()">
+      🖨 Gravar no Sistema
+    </button>
   </div>
   <div class="table-responsive">
     <table class="table table-sm mb-0 align-middle">
@@ -112,8 +115,9 @@
       </tbody>
     </table>
   </div>
-  <div class="card-footer text-muted small">
-    Rode <code>python usinas/preencher_lexdash.py</code> pra preencher o grid automaticamente.
+  <div id="gravar-status" class="card-footer d-none">
+    <div id="gravar-msg" class="small"></div>
+    <pre id="gravar-log" class="mt-2 mb-0 small bg-dark text-light p-2 rounded d-none" style="max-height:200px;overflow-y:auto"></pre>
   </div>
 </div>
 {% endif %}
@@ -187,6 +191,57 @@ async function aprovarTodos() {
     row.style.opacity = '0.4';
   }
   setTimeout(() => location.reload(), 800);
+}
+
+async function gravarLexDash() {
+  const btn = document.getElementById('btn-gravar');
+  const statusDiv = document.getElementById('gravar-status');
+  const msgEl = document.getElementById('gravar-msg');
+  const logEl = document.getElementById('gravar-log');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Gravando…';
+  statusDiv.className = 'card-footer';
+  msgEl.innerHTML = '<span class="text-warning">⏳ Abrindo LexDash e preenchendo o grid… isso pode levar ~30 segundos.</span>';
+  logEl.classList.add('d-none');
+
+  // Dispara o job no servidor local
+  const res = await fetch('http://localhost:5002/gravar-lexdash', {method: 'POST'});
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    msgEl.innerHTML = `<span class="text-danger">❌ ${j.msg || 'Erro ao iniciar.'}</span>`;
+    btn.disabled = false;
+    btn.textContent = '🖨 Gravar no Sistema';
+    return;
+  }
+
+  // Polling de status
+  const poll = setInterval(async () => {
+    try {
+      const s = await fetch('http://localhost:5002/gravar-lexdash/status').then(r => r.json());
+      if (s.estado === 'rodando') {
+        msgEl.innerHTML = `<span class="text-warning">⏳ ${s.log || 'Processando…'}</span>`;
+        return;
+      }
+      clearInterval(poll);
+      if (s.estado === 'ok') {
+        msgEl.innerHTML = '<span class="text-success fw-semibold">✓ Preenchimento concluído!</span>';
+        btn.textContent = '✓ Gravado';
+        if (s.log) { logEl.textContent = s.log; logEl.classList.remove('d-none'); }
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        msgEl.innerHTML = '<span class="text-danger">❌ Erro durante preenchimento. Veja o log abaixo.</span>';
+        if (s.log) { logEl.textContent = s.log; logEl.classList.remove('d-none'); }
+        btn.disabled = false;
+        btn.textContent = '🖨 Gravar no Sistema';
+      }
+    } catch (e) {
+      clearInterval(poll);
+      msgEl.innerHTML = '<span class="text-danger">❌ Servidor local não respondeu.</span>';
+      btn.disabled = false;
+      btn.textContent = '🖨 Gravar no Sistema';
+    }
+  }, 2000);
 }
 
 function abrirEditar(id, tg, td, tc, pdfPath, dist, mes) {
