@@ -77,16 +77,18 @@
           <div class="row g-2 mb-2">
             <div class="col-4">
               <label class="form-label">Tipo GD</label>
+              {% set _tipo_gd_pre = fatura.tipo_gd if fatura else (extraido.get('tipo_gd') if extraido else None) %}
               <select name="tipo_gd" class="form-select" onchange="atualizarPainelCelesc()">
-                <option value="GD1" {% if (fatura and fatura.tipo_gd == 'GD1') or not fatura %}selected{% endif %}>GD1</option>
-                <option value="GD2" {% if fatura and fatura.tipo_gd == 'GD2' %}selected{% endif %}>GD2</option>
+                <option value="GD1" {% if _tipo_gd_pre != 'GD2' %}selected{% endif %}>GD1</option>
+                <option value="GD2" {% if _tipo_gd_pre == 'GD2' %}selected{% endif %}>GD2</option>
               </select>
             </div>
             <div class="col-8">
               <label class="form-label">Modalidade</label>
+              {% set _modal_pre = fatura.modalidade if fatura else (extraido.get('modalidade') if extraido else None) %}
               <select name="modalidade" class="form-select" onchange="atualizarPainelCelesc()">
-                <option value="Geração Compartilhada" {% if not fatura or fatura.modalidade == 'Geração Compartilhada' %}selected{% endif %}>Geração Compartilhada</option>
-                <option value="Autoconsumo" {% if fatura and fatura.modalidade == 'Autoconsumo' %}selected{% endif %}>Autoconsumo</option>
+                <option value="Geração Compartilhada" {% if _modal_pre != 'Autoconsumo' %}selected{% endif %}>Geração Compartilhada</option>
+                <option value="Autoconsumo" {% if _modal_pre == 'Autoconsumo' %}selected{% endif %}>Autoconsumo</option>
               </select>
             </div>
           </div>

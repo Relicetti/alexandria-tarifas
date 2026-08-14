@@ -345,6 +345,67 @@ def _processar_bandeiras(dados: dict) -> dict:
     return dados
 
 
+def _corrigir_icms(tarifa: float, icms_pct) -> float:
+    """Corrige tarifa 'por dentro' de ICMS 12% para 17%. Se já for 17% (ou
+    outro valor), retorna sem alteração."""
+    try:
+        icms = float(icms_pct)
+    except (TypeError, ValueError):
+        return tarifa
+    if round(icms) == 12:
+        return tarifa * (1 - 0.12) / (1 - 0.17)
+    return tarifa
+
+
+def _processar_celesc_gd2(dados: dict) -> dict:
+    """
+    Recalcula te_consumo/tusd_consumo/te_compensada/tusd_compensada de forma
+    DETERMINÍSTICA (em Python, não confiando na matemática da IA) para
+    faturas CELESC GD2, a partir dos campos brutos celesc_* extraídos.
+
+    Também define `modalidade` automaticamente: presença de celesc_valor_0q
+    indica Autoconsumo (tem itens 0Q/0T); ausência indica Geração
+    Compartilhada (só 0P/0S/12/13).
+    """
+    dist = (dados.get("distribuidora") or "").lower()
+    if "celesc" not in dist:
+        return dados
+
+    p0p = dados.get("celesc_0p_preco")
+    p0s = dados.get("celesc_0s_preco")
+    if p0p is None or p0s is None:
+        return dados  # não é GD2 / dados insuficientes — não mexe
+
+    te_consumo   = _corrigir_icms(float(p0p), dados.get("celesc_0p_icms"))
+    tusd_consumo = _corrigir_icms(float(p0s), dados.get("celesc_0s_icms"))
+
+    v0q = dados.get("celesc_valor_0q")
+    v12 = dados.get("celesc_valor_12")
+    v0t = dados.get("celesc_valor_0t")
+    v13 = dados.get("celesc_valor_13")
+    inj = float(dados.get("injetada_kwh") or 0)
+
+    if v0q is not None and inj:
+        # Subtipo Autoconsumo — fórmula completa com valores brutos
+        dados["modalidade"] = "Autoconsumo"
+        te_compensada   = (inj * te_consumo   - (float(v0q) + float(v12 or 0))) / inj
+        tusd_compensada = (inj * tusd_consumo - (float(v0t or 0) + float(v13 or 0))) / inj
+    else:
+        # Subtipo Geração Compartilhada — compensada = preço unit. de (12)/(13)
+        dados["modalidade"] = "Geração Compartilhada"
+        p12 = dados.get("celesc_preco_12")
+        p13 = dados.get("celesc_preco_13")
+        te_compensada   = float(p12) if p12 is not None else te_consumo
+        tusd_compensada = float(p13) if p13 is not None else tusd_consumo
+
+    dados["te_consumo"]      = round(te_consumo, 6)
+    dados["tusd_consumo"]    = round(tusd_consumo, 6)
+    dados["te_compensada"]   = round(te_compensada, 6)
+    dados["tusd_compensada"] = round(tusd_compensada, 6)
+    dados["tipo_gd"] = "GD2"  # a estrutura de itens 0P/0S/12/13 só existe em faturas GD2
+    return dados
+
+
 def extrair_fatura(pdf_bytes: bytes) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -381,5 +442,6 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
     text = re.sub(r"\s*```$", "", text)
 
     dados = json.loads(text)
+    dados = _processar_celesc_gd2(dados)
     dados = _processar_bandeiras(dados)
     return dados
