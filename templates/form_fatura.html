@@ -5,6 +5,11 @@
   {%- if fatura -%}{{ fatura[field] if fatura[field] is not none else default }}{%- elif extraido -%}{{ extraido.get(field) if extraido.get(field) is not none else default }}{%- else -%}{{ default }}{%- endif -%}
 {%- endmacro %}
 
+{# Campos que só existem em `extraido` (calculadora CELESC), nunca em `fatura` (não são colunas do banco) #}
+{% macro pvx(field, default='') -%}
+  {%- if extraido and extraido.get(field) is not none -%}{{ extraido.get(field) }}{%- else -%}{{ default }}{%- endif -%}
+{%- endmacro %}
+
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">{{ 'Editar Fatura' if fatura else 'Nova Fatura' }}</h4>
@@ -277,37 +282,37 @@
                 <div class="row g-2 mb-2">
                   <div class="col-5">
                     <label class="form-label small mb-0">(0P) Preço TE consumo</label>
-                    <input type="number" step="any" id="c_0p" class="form-control form-control-sm" placeholder="ex: 0.418921">
+                    <input type="number" step="any" id="c_0p" class="form-control form-control-sm" placeholder="ex: 0.418921" value="{{ pvx('celesc_0p_preco') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">ICMS (0P)</label>
                     <select id="c_0p_icms" class="form-select form-select-sm">
-                      <option value="17">17%</option>
-                      <option value="12">12%</option>
+                      <option value="17" {% if pvx('celesc_0p_icms')|string != '12' %}selected{% endif %}>17%</option>
+                      <option value="12" {% if pvx('celesc_0p_icms')|string == '12' %}selected{% endif %}>12%</option>
                     </select>
                   </div>
                 </div>
                 <div class="row g-2 mb-2">
                   <div class="col-5">
                     <label class="form-label small mb-0">(0S) Preço TUSD consumo</label>
-                    <input type="number" step="any" id="c_0s" class="form-control form-control-sm" placeholder="ex: 0.486295">
+                    <input type="number" step="any" id="c_0s" class="form-control form-control-sm" placeholder="ex: 0.486295" value="{{ pvx('celesc_0s_preco') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">ICMS (0S)</label>
                     <select id="c_0s_icms" class="form-select form-select-sm">
-                      <option value="17">17%</option>
-                      <option value="12">12%</option>
+                      <option value="17" {% if pvx('celesc_0s_icms')|string != '12' %}selected{% endif %}>17%</option>
+                      <option value="12" {% if pvx('celesc_0s_icms')|string == '12' %}selected{% endif %}>12%</option>
                     </select>
                   </div>
                 </div>
                 <div class="row g-2 mb-2">
                   <div class="col-4">
                     <label class="form-label small mb-0">(12) Preço unit. TE crédito</label>
-                    <input type="number" step="any" id="c_12" class="form-control form-control-sm" placeholder="ex: 0.321930">
+                    <input type="number" step="any" id="c_12" class="form-control form-control-sm" placeholder="ex: 0.321930" value="{{ pvx('celesc_preco_12') }}">
                   </div>
                   <div class="col-4">
                     <label class="form-label small mb-0">(13) Preço unit. TUSD crédito</label>
-                    <input type="number" step="any" id="c_13" class="form-control form-control-sm" placeholder="ex: 0.294104">
+                    <input type="number" step="any" id="c_13" class="form-control form-control-sm" placeholder="ex: 0.294104" value="{{ pvx('celesc_preco_13') }}">
                   </div>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" onclick="calcCelescGC()">Calcular e preencher →</button>
@@ -322,45 +327,45 @@
                 <div class="row g-2 mb-2">
                   <div class="col-5">
                     <label class="form-label small mb-0">(0P) Preço TE consumo</label>
-                    <input type="number" step="any" id="ac_0p" class="form-control form-control-sm">
+                    <input type="number" step="any" id="ac_0p" class="form-control form-control-sm" value="{{ pvx('celesc_0p_preco') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">ICMS (0P)</label>
                     <select id="ac_0p_icms" class="form-select form-select-sm">
-                      <option value="17">17%</option>
-                      <option value="12">12%</option>
+                      <option value="17" {% if pvx('celesc_0p_icms')|string != '12' %}selected{% endif %}>17%</option>
+                      <option value="12" {% if pvx('celesc_0p_icms')|string == '12' %}selected{% endif %}>12%</option>
                     </select>
                   </div>
                 </div>
                 <div class="row g-2 mb-2">
                   <div class="col-5">
                     <label class="form-label small mb-0">(0S) Preço TUSD consumo</label>
-                    <input type="number" step="any" id="ac_0s" class="form-control form-control-sm">
+                    <input type="number" step="any" id="ac_0s" class="form-control form-control-sm" value="{{ pvx('celesc_0s_preco') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">ICMS (0S)</label>
                     <select id="ac_0s_icms" class="form-select form-select-sm">
-                      <option value="17">17%</option>
-                      <option value="12">12%</option>
+                      <option value="17" {% if pvx('celesc_0s_icms')|string != '12' %}selected{% endif %}>17%</option>
+                      <option value="12" {% if pvx('celesc_0s_icms')|string == '12' %}selected{% endif %}>12%</option>
                     </select>
                   </div>
                 </div>
                 <div class="row g-2 mb-2">
                   <div class="col-3">
                     <label class="form-label small mb-0">Valor 0Q (R$)</label>
-                    <input type="number" step="any" id="ac_v0q" class="form-control form-control-sm" placeholder="45.27">
+                    <input type="number" step="any" id="ac_v0q" class="form-control form-control-sm" placeholder="45.27" value="{{ pvx('celesc_valor_0q') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">Valor (12) (R$) — negativo</label>
-                    <input type="number" step="any" id="ac_v12" class="form-control form-control-sm" placeholder="-45.26">
+                    <input type="number" step="any" id="ac_v12" class="form-control form-control-sm" placeholder="-45.26" value="{{ pvx('celesc_valor_12') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">Valor 0T total (R$)</label>
-                    <input type="number" step="any" id="ac_v0t" class="form-control form-control-sm" placeholder="61.43">
+                    <input type="number" step="any" id="ac_v0t" class="form-control form-control-sm" placeholder="61.43" value="{{ pvx('celesc_valor_0t') }}">
                   </div>
                   <div class="col-3">
                     <label class="form-label small mb-0">Valor (13) (R$) — negativo</label>
-                    <input type="number" step="any" id="ac_v13" class="form-control form-control-sm" placeholder="-41.35">
+                    <input type="number" step="any" id="ac_v13" class="form-control form-control-sm" placeholder="-41.35" value="{{ pvx('celesc_valor_13') }}">
                   </div>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" onclick="calcCelescAC()">Calcular e preencher →</button>

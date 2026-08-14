@@ -63,6 +63,17 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
   "b_verm_p2_inj_kwh": número ou 0,
   "b_verm_p2_inj_valor": número ou 0,
 
+  "celesc_0p_preco": número (preço unit. c/trib. do item 0P) ou null — SÓ para CELESC GD2,
+  "celesc_0p_icms": número (alíquota ICMS % do item 0P, ex: 12 ou 17) ou null — SÓ para CELESC GD2,
+  "celesc_0s_preco": número (preço unit. c/trib. do item 0S) ou null — SÓ para CELESC GD2,
+  "celesc_0s_icms": número (alíquota ICMS % do item 0S, ex: 12 ou 17) ou null — SÓ para CELESC GD2,
+  "celesc_preco_12": número (preço unit. do item 12) ou null — SÓ para CELESC GD2,
+  "celesc_preco_13": número (preço unit. do item 13) ou null — SÓ para CELESC GD2,
+  "celesc_valor_0q": número (soma Valor R$ de todas as linhas 0Q) ou null — SÓ para CELESC GD2 Autoconsumo,
+  "celesc_valor_12": número (soma Valor R$ de todas as linhas 12, negativo) ou null — SÓ para CELESC GD2 Autoconsumo,
+  "celesc_valor_0t": número (soma Valor R$ de TODAS as linhas 0T) ou null — SÓ para CELESC GD2 Autoconsumo,
+  "celesc_valor_13": número (soma Valor R$ de todas as linhas 13, negativo) ou null — SÓ para CELESC GD2 Autoconsumo,
+
   "grupo": "um de: GER | EQT | NEOENERGIA | ENERGISA | LIGHT | CEMIG | BRASILIA"
 }
 
@@ -84,6 +95,20 @@ Instruções:
   * (73) Ben Tar Líq G2     — Benefício tarifário líquido GD2 (mesmo valor negativo — cancela o (6U) nesta UC)
 
   DOIS SUBTIPOS de CELESC G2 — identifique pelo que aparece na fatura:
+
+  SEMPRE preencha também os campos brutos celesc_* do JSON (além dos te_/tusd_ finais),
+  usando os valores exatos lidos da fatura, para que o usuário possa conferir/ajustar:
+  * celesc_0p_preco / celesc_0p_icms = "Preço unit." e "ICMS (%)" da linha (0P)
+    (se houver múltiplas linhas 0P, use a de maior kWh)
+  * celesc_0s_preco / celesc_0s_icms = "Preço unit." e "ICMS (%)" da linha (0S)
+    (se houver múltiplas linhas 0S, use a de maior kWh)
+  * celesc_preco_12 = "Preço unit." da linha (12)
+  * celesc_preco_13 = "Preço unit." da linha (13)
+  * Só para Autoconsumo (quando existem 0Q/0T na fatura):
+    celesc_valor_0q = soma "Valor R$" de todas as linhas (0Q)
+    celesc_valor_12 = soma "Valor R$" de todas as linhas (12)
+    celesc_valor_0t = soma "Valor R$" de TODAS as linhas (0T)
+    celesc_valor_13 = soma "Valor R$" de todas as linhas (13)
 
   ── SUBTIPO A: Autoconsumo (mesma UC) ──
   Fatura contém itens (0Q) e (0T) — são os kWh compensados dentro da própria UC.
