@@ -261,6 +261,111 @@
               value="{{ pv('tusd_compensada') }}">
           </div>
 
+          <!-- CELESC GD2: calculadora por modalidade -->
+          <div class="col-12" id="bloco_celesc_gd2" style="display:none">
+            <div class="border rounded p-2 small" style="background:#f0f8ff">
+              <div class="fw-semibold text-primary mb-2">⚡ CELESC GD2</div>
+
+              <!-- Geração Compartilhada -->
+              <div id="celesc_gc_panel">
+                <div class="text-muted mb-2" style="font-size:0.75rem">
+                  Preencha os itens da fatura. TE/TUSD compensada = preço unit. de (12)/(13) direto.
+                  Aplica correção ICMS 12% → 17% se necessário.
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-5">
+                    <label class="form-label small mb-0">(0P) Preço TE consumo</label>
+                    <input type="number" step="any" id="c_0p" class="form-control form-control-sm" placeholder="ex: 0.418921">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">ICMS (0P)</label>
+                    <select id="c_0p_icms" class="form-select form-select-sm">
+                      <option value="17">17%</option>
+                      <option value="12">12%</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-5">
+                    <label class="form-label small mb-0">(0S) Preço TUSD consumo</label>
+                    <input type="number" step="any" id="c_0s" class="form-control form-control-sm" placeholder="ex: 0.486295">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">ICMS (0S)</label>
+                    <select id="c_0s_icms" class="form-select form-select-sm">
+                      <option value="17">17%</option>
+                      <option value="12">12%</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-4">
+                    <label class="form-label small mb-0">(12) Preço unit. TE crédito</label>
+                    <input type="number" step="any" id="c_12" class="form-control form-control-sm" placeholder="ex: 0.321930">
+                  </div>
+                  <div class="col-4">
+                    <label class="form-label small mb-0">(13) Preço unit. TUSD crédito</label>
+                    <input type="number" step="any" id="c_13" class="form-control form-control-sm" placeholder="ex: 0.294104">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="calcCelescGC()">Calcular e preencher →</button>
+              </div>
+
+              <!-- Autoconsumo -->
+              <div id="celesc_ac_panel" style="display:none">
+                <div class="text-muted mb-2" style="font-size:0.75rem">
+                  Preencha os itens da fatura. Aplica correção ICMS 12% → 17% em TE/TUSD consumo.
+                  Compensada calculada via (Inj × tarifa − (Valor_0Q + Valor_12)) / Inj.
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-5">
+                    <label class="form-label small mb-0">(0P) Preço TE consumo</label>
+                    <input type="number" step="any" id="ac_0p" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">ICMS (0P)</label>
+                    <select id="ac_0p_icms" class="form-select form-select-sm">
+                      <option value="17">17%</option>
+                      <option value="12">12%</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-5">
+                    <label class="form-label small mb-0">(0S) Preço TUSD consumo</label>
+                    <input type="number" step="any" id="ac_0s" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">ICMS (0S)</label>
+                    <select id="ac_0s_icms" class="form-select form-select-sm">
+                      <option value="17">17%</option>
+                      <option value="12">12%</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-3">
+                    <label class="form-label small mb-0">Valor 0Q (R$)</label>
+                    <input type="number" step="any" id="ac_v0q" class="form-control form-control-sm" placeholder="45.27">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">Valor (12) (R$) — negativo</label>
+                    <input type="number" step="any" id="ac_v12" class="form-control form-control-sm" placeholder="-45.26">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">Valor 0T total (R$)</label>
+                    <input type="number" step="any" id="ac_v0t" class="form-control form-control-sm" placeholder="61.43">
+                  </div>
+                  <div class="col-3">
+                    <label class="form-label small mb-0">Valor (13) (R$) — negativo</label>
+                    <input type="number" step="any" id="ac_v13" class="form-control form-control-sm" placeholder="-41.35">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="calcCelescAC()">Calcular e preencher →</button>
+              </div>
+            </div>
+          </div>
+
           <!-- Calculadora de média ponderada por faixas de ICMS -->
           <div class="col-12 collapse" id="calc_ponderado">
             <div class="border rounded p-2 bg-light small">
@@ -754,11 +859,86 @@ document.getElementById('formFatura').addEventListener('submit', function() {
   });
 });
 
+// ── CELESC GD2: exibe/oculta painel por distribuidora + tipo_gd + modalidade ──
+function isCelescGD2() {
+  const dist = (document.getElementById('distribuidora')?.value || '').toLowerCase();
+  const tipo = document.querySelector('[name=tipo_gd]')?.value || '';
+  return dist.includes('celesc') && tipo === 'GD2';
+}
+
+function atualizarPainelCelesc() {
+  const visivel = isCelescGD2();
+  const modal   = document.querySelector('[name=modalidade]')?.value || '';
+  const isGC    = modal === 'Geração Compartilhada';
+
+  document.getElementById('bloco_celesc_gd2').style.display = visivel ? '' : 'none';
+  if (visivel) {
+    document.getElementById('celesc_gc_panel').style.display = isGC ? '' : 'none';
+    document.getElementById('celesc_ac_panel').style.display = isGC ? 'none' : '';
+  }
+}
+
+// Correção ICMS por dentro: 12% → 17%
+function corrigirIcms(tarifa, icms) {
+  return parseInt(icms) === 12 ? tarifa * (1 - 0.12) / (1 - 0.17) : tarifa;
+}
+
+function calcCelescGC() {
+  const inj = parseFloat(document.querySelector('[name=injetada_kwh]')?.value) || 0;
+
+  const p0p  = parseFloat(document.getElementById('c_0p')?.value) || 0;
+  const i0p  = document.getElementById('c_0p_icms')?.value || '17';
+  const p0s  = parseFloat(document.getElementById('c_0s')?.value) || 0;
+  const i0s  = document.getElementById('c_0s_icms')?.value || '17';
+  const p12  = parseFloat(document.getElementById('c_12')?.value) || 0;
+  const p13  = parseFloat(document.getElementById('c_13')?.value) || 0;
+
+  const te_cons   = corrigirIcms(p0p, i0p);
+  const tusd_cons = corrigirIcms(p0s, i0s);
+
+  document.getElementById('te_consumo').value    = te_cons.toFixed(6);
+  document.getElementById('tusd_consumo').value  = tusd_cons.toFixed(6);
+  document.getElementById('te_compensada').value   = p12.toFixed(6);
+  document.getElementById('tusd_compensada').value = p13.toFixed(6);
+  calcPreview();
+}
+
+function calcCelescAC() {
+  const inj = parseFloat(document.querySelector('[name=injetada_kwh]')?.value) || 0;
+  if (!inj) { alert('Preencha primeiro o campo "Injetada (kWh)".'); return; }
+
+  const p0p  = parseFloat(document.getElementById('ac_0p')?.value) || 0;
+  const i0p  = document.getElementById('ac_0p_icms')?.value || '17';
+  const p0s  = parseFloat(document.getElementById('ac_0s')?.value) || 0;
+  const i0s  = document.getElementById('ac_0s_icms')?.value || '17';
+  const v0q  = parseFloat(document.getElementById('ac_v0q')?.value) || 0;
+  const v12  = parseFloat(document.getElementById('ac_v12')?.value) || 0;
+  const v0t  = parseFloat(document.getElementById('ac_v0t')?.value) || 0;
+  const v13  = parseFloat(document.getElementById('ac_v13')?.value) || 0;
+
+  const te_cons   = corrigirIcms(p0p, i0p);
+  const tusd_cons = corrigirIcms(p0s, i0s);
+  const te_comp   = (inj * te_cons   - (v0q + v12)) / inj;
+  const tusd_comp = (inj * tusd_cons - (v0t + v13)) / inj;
+
+  document.getElementById('te_consumo').value    = te_cons.toFixed(6);
+  document.getElementById('tusd_consumo').value  = tusd_cons.toFixed(6);
+  document.getElementById('te_compensada').value   = te_comp.toFixed(6);
+  document.getElementById('tusd_compensada').value = tusd_comp.toFixed(6);
+  calcPreview();
+}
+
+// Ouve mudanças em Tipo GD e Modalidade
+document.querySelector('[name=tipo_gd]')?.addEventListener('change', atualizarPainelCelesc);
+document.querySelector('[name=modalidade]')?.addEventListener('change', atualizarPainelCelesc);
+document.getElementById('distribuidora')?.addEventListener('input', atualizarPainelCelesc);
+
 // Inicialização
 document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', calcPreview));
 document.getElementById('cobra_band').addEventListener('change', calcPreview);
 document.getElementById('impostos_com_desconto').addEventListener('change', calcPreview);
 if (grupoAtual) aplicarGrupo(grupoAtual);
+atualizarPainelCelesc();
 
 // Aplica desconto da distribuidora se campo já vier preenchido (ex: extração PDF)
 const _distrib = document.getElementById('distribuidora');
