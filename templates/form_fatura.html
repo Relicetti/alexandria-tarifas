@@ -262,7 +262,9 @@
           </div>
 
           <!-- CELESC GD2: calculadora por modalidade -->
-          <div class="col-12" id="bloco_celesc_gd2" style="display:none">
+          {% set _dist_val = (fatura.distribuidora if fatura else extraido.get('distribuidora','') if extraido else '') | lower %}
+          {% set _is_celesc = 'celesc' in _dist_val %}
+          <div class="col-12" id="bloco_celesc_gd2" {% if not _is_celesc %}style="display:none"{% endif %}>
             <div class="border rounded p-2 small" style="background:#f0f8ff">
               <div class="fw-semibold text-primary mb-2">⚡ CELESC GD2</div>
 
@@ -865,8 +867,7 @@ document.getElementById('formFatura').addEventListener('submit', function() {
 // ── CELESC GD2: exibe/oculta painel por distribuidora + tipo_gd + modalidade ──
 function isCelescGD2() {
   const dist = (document.getElementById('distribuidora')?.value || '').toLowerCase();
-  const tipo = document.querySelector('[name=tipo_gd]')?.value || '';
-  return dist.includes('celesc') && tipo === 'GD2';
+  return dist.includes('celesc');
 }
 
 function atualizarPainelCelesc() {
