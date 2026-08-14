@@ -82,45 +82,73 @@ Instruções:
   * (6U) Ben Tar Brut G2    — Benefício tarifário bruto GD2 (diferença TUSD cobrada vs creditada)
   * (73) Ben Tar Líq G2     — Benefício tarifário líquido GD2 (mesmo valor negativo — cancela o (6U) nesta UC)
 
-  REGRAS para CELESC G2 — fórmulas exatas:
+  DOIS SUBTIPOS de CELESC G2 — identifique pelo que aparece na fatura:
+
+  ── SUBTIPO A: Autoconsumo (mesma UC) ──
+  Fatura contém itens (0Q) e (0T) — são os kWh compensados dentro da própria UC.
+  Estrutura: 0P + 0Q + 0S + 0T + 12 + 13 + 6U + 73
+
+  REGRAS para CELESC G2 Autoconsumo:
   * consumo_kwh  = soma de TODOS os kWh (0P) + soma de todos os kWh (0Q)
   * injetada_kwh = kWh do item (12) ou (13) — são iguais
   * grupo = "GER"
-  * tarifa_distribuidora_input = null, tarifa_compensada_input = null, ajuste_gd2 = 0
-  * ATENÇÃO: (0P) e (0S) podem aparecer em MÚLTIPLAS LINHAS (uma por faixa de ICMS, ex: 12% e 17%).
+  * ATENÇÃO: (0P) e (0S) podem aparecer em MÚLTIPLAS LINHAS (uma por faixa de ICMS).
     Sempre calcule a MÉDIA PONDERADA pelo kWh:
   * te_consumo_raw   = Σ(kWh_faixa_0P × preço_faixa_0P) / Σ(kWh_faixa_0P)
   * tusd_consumo_raw = Σ(kWh_faixa_0S × preço_faixa_0S) / Σ(kWh_faixa_0S)
 
-  CORREÇÃO DE ICMS (obrigatória para CELESC G2 e autoconsumo):
-  A Celesc pode emitir o item (0P)/(0S) com ICMS de 12% em vez de 17%.
-  Quando isso ocorre, a tarifa precisa ser recalculada "por dentro" para 17%:
-  * Se ICMS de (0P) = 12%: te_consumo   = te_consumo_raw   × (1 − 0,12) / (1 − 0,17)
-  * Se ICMS de (0P) = 17%: te_consumo   = te_consumo_raw   (usa como está)
-  * Se ICMS de (0S) = 12%: tusd_consumo = tusd_consumo_raw × (1 − 0,12) / (1 − 0,17)
-  * Se ICMS de (0S) = 17%: tusd_consumo = tusd_consumo_raw (usa como está)
-  O ICMS de cada linha está na coluna "ICMS (%)" da fatura. Quando (0P) ou (0S) tiver
-  múltiplas linhas com ICMS diferentes, use o ICMS da linha predominante (maior kWh) para
-  decidir se aplica a correção; ou aplique a correção linha a linha e recalcule a média ponderada.
+  CORREÇÃO DE ICMS (para Autoconsumo):
+  Se ICMS de (0P) = 12%: te_consumo   = te_consumo_raw   × (1 − 0,12) / (1 − 0,17)
+  Se ICMS de (0P) = 17%: te_consumo   = te_consumo_raw   (usa como está)
+  Se ICMS de (0S) = 12%: tusd_consumo = tusd_consumo_raw × (1 − 0,12) / (1 − 0,17)
+  Se ICMS de (0S) = 17%: tusd_consumo = tusd_consumo_raw (usa como está)
+  Quando (0P) ou (0S) tiver múltiplas linhas com ICMS diferentes, aplique a correção
+  linha a linha antes de calcular a média ponderada.
 
-  FÓRMULAS FINAIS:
+  FÓRMULAS FINAIS (Autoconsumo):
   * valor_0q        = soma dos Valor R$ de todas as linhas (0Q)
   * valor_12        = soma dos Valor R$ de todas as linhas (12) — será negativo
-  * valor_0t        = soma dos Valor R$ de TODAS as linhas (0T) — pode ter 12% e 17%, soma tudo
+  * valor_0t        = soma dos Valor R$ de TODAS as linhas (0T) — soma tudo, qualquer ICMS
   * valor_13        = soma dos Valor R$ de todas as linhas (13) — será negativo
   * te_compensada   = (injetada_kwh × te_consumo   − (valor_0q + valor_12)) / injetada_kwh
   * tusd_compensada = (injetada_kwh × tusd_consumo − (valor_0t + valor_13)) / injetada_kwh
 
-  Exemplo com esta fatura de referência (08/2026 — ASSOCIACAO USINAS ALEXANDRIA II):
+  Exemplo Autoconsumo (08/2026 — ASSOCIACAO USINAS ALEXANDRIA II):
       injetada_kwh    = 140,610
       (0P) ICMS 12% → te_consumo_raw = 0,394947 → corrigido: 0,394947 × 0,88/0,83 = 0,418737
       (0S) ICMS 12% → tusd_consumo_raw = 0,458568 → corrigido: 0,458568 × 0,88/0,83 = 0,486193
       valor_0q = 45,27  |  valor_12 = -45,26  →  soma = 0,01
       valor_0t = 31,26 + 30,17 = 61,43  |  valor_13 = -41,35  →  soma = 20,08
-      te_consumo   (saída) = 0,418737
-      tusd_consumo (saída) = 0,486193
-      te_compensada   = (140,610 × 0,418737 − 0,01)   / 140,610 = 0,418666
-      tusd_compensada = (140,610 × 0,486193 − 20,08)  / 140,610 = 0,343414
+      te_compensada   = (140,610 × 0,418737 − 0,01)  / 140,610 = 0,418666
+      tusd_compensada = (140,610 × 0,486193 − 20,08) / 140,610 = 0,343414
+
+  ── SUBTIPO B: Geração Compartilhada (outra UC) ──
+  Fatura NÃO contém itens (0Q) nem (0T). Só há (0P), (0S), (12), (13), (6U), (73).
+  O consumidor paga o consumo total em (0P)/(0S) e recebe crédito direto em (12)/(13).
+
+  REGRAS para CELESC G2 Geração Compartilhada:
+  * consumo_kwh  = kWh do item (0P)
+  * injetada_kwh = kWh do item (12) ou (13) — são iguais
+  * grupo = "GER"
+
+  CORREÇÃO DE ICMS (para Geração Compartilhada):
+  Aplica a mesma lógica: se ICMS de (0P)/(0S) for 12%, corrige para 17%.
+  Se já for 17%, usa como está.
+  Se ICMS de (0P) = 12%: te_consumo   = preço(0P) × (1 − 0,12) / (1 − 0,17)
+  Se ICMS de (0P) = 17%: te_consumo   = preço(0P)
+  Se ICMS de (0S) = 12%: tusd_consumo = preço(0S) × (1 − 0,12) / (1 − 0,17)
+  Se ICMS de (0S) = 17%: tusd_consumo = preço(0S)
+
+  FÓRMULAS FINAIS (Geração Compartilhada) — simples, pega direto da fatura:
+  * te_compensada   = preço unitário do item (12)   (coluna "Preço unit." da linha 12)
+  * tusd_compensada = preço unitário do item (13)   (coluna "Preço unit." da linha 13)
+
+  Exemplo Geração Compartilhada (08/2026 — EPPLER E BONELLI):
+      consumo_kwh  = 278,000  |  injetada_kwh = 256,597
+      (0P) ICMS 17% → te_consumo   = 0,418921  (sem correção)
+      (0S) ICMS 17% → tusd_consumo = 0,486295  (sem correção)
+      te_compensada   = 0,321930  (preço unitário do item 12)
+      tusd_compensada = 0,294104  (preço unitário do item 13)
 
 - Para faturas CELESC G1 (geração local, sem injeção remota): usar o padrão GER normal
   (te_consumo + tusd_consumo separados, te_compensada + tusd_compensada, grupo = "GER")
