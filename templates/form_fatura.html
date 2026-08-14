@@ -72,14 +72,14 @@
           <div class="row g-2 mb-2">
             <div class="col-4">
               <label class="form-label">Tipo GD</label>
-              <select name="tipo_gd" class="form-select">
+              <select name="tipo_gd" class="form-select" onchange="atualizarPainelCelesc()">
                 <option value="GD1" {% if (fatura and fatura.tipo_gd == 'GD1') or not fatura %}selected{% endif %}>GD1</option>
                 <option value="GD2" {% if fatura and fatura.tipo_gd == 'GD2' %}selected{% endif %}>GD2</option>
               </select>
             </div>
             <div class="col-8">
               <label class="form-label">Modalidade</label>
-              <select name="modalidade" class="form-select">
+              <select name="modalidade" class="form-select" onchange="atualizarPainelCelesc()">
                 <option value="Geração Compartilhada" {% if not fatura or fatura.modalidade == 'Geração Compartilhada' %}selected{% endif %}>Geração Compartilhada</option>
                 <option value="Autoconsumo" {% if fatura and fatura.modalidade == 'Autoconsumo' %}selected{% endif %}>Autoconsumo</option>
               </select>
