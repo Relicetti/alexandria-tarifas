@@ -3,10 +3,11 @@ import base64
 import json
 import re
 import anthropic
+from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
-PROMPT = """Você está analisando uma fatura de energia elétrica brasileira de um sistema de geração distribuída (GD solar).
+_PROMPT_BASE = """Você está analisando uma fatura de energia elétrica brasileira de um sistema de geração distribuída (GD solar).
 
 Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
 
@@ -244,6 +245,27 @@ Instruções:
   * NUNCA deixe b_X_cons_valor = 0 se houver qualquer cobrança de bandeira na fatura
 """
 
+# ── Override de aprendizado ────────────────────────────────────────────────
+# melhorar_prompt.py grava aqui o PROMPT reescrito com base nas correções do
+# usuário. Fica no volume persistente (/data), então sobrevive a redeploys —
+# diferente de sobrescrever este arquivo .py, que é apagado a cada deploy.
+_DATA_DIR = Path(os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "tarifas.db"))).parent
+PROMPT_OVERRIDE_FILE = _DATA_DIR / "prompt_extrator_aprendido.txt"
+
+
+def _carregar_prompt() -> str:
+    try:
+        if PROMPT_OVERRIDE_FILE.exists():
+            texto = PROMPT_OVERRIDE_FILE.read_text(encoding="utf-8").strip()
+            if texto:
+                return texto
+    except Exception:
+        pass
+    return _PROMPT_BASE
+
+
+PROMPT = _carregar_prompt()
+
 
 # Grupos que cobram bandeira no consumo BRUTO e creditam na injeção
 # com a mesma tarifa unitária (cons_R$ / consumo_kWh).
@@ -323,7 +345,7 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
                         "data": pdf_b64,
                     },
                 },
-                {"type": "text", "text": PROMPT},
+                {"type": "text", "text": _carregar_prompt()},
             ],
         }],
     )

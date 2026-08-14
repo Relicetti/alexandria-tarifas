@@ -1,6 +1,10 @@
 """
 Melhora automaticamente o PROMPT de extração com base no feedback de correções.
 Chamado em background após cada fatura salva com divergências.
+
+O prompt aprendido é gravado em PROMPT_OVERRIDE_FILE, no volume persistente
+(/data) — não no .py — para sobreviver a redeploys (o filesystem do container
+é recriado do zero a cada deploy a partir do Git; o volume não).
 """
 
 import json
@@ -13,9 +17,10 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 import db as _db
-_DATA_DIR     = Path(_db.DB_PATH).parent
-FEEDBACK_FILE = _DATA_DIR / "feedback_extracao.jsonl"
-EXTRATOR_FILE = Path(__file__).parent / "extrator.py"
+import extrator as _extrator
+_DATA_DIR          = Path(_db.DB_PATH).parent
+FEEDBACK_FILE      = _DATA_DIR / "feedback_extracao.jsonl"
+PROMPT_OVERRIDE_FILE = _extrator.PROMPT_OVERRIDE_FILE
 
 PROMPT_MELHORIA = """Você é um engenheiro de prompts especialista em extração de dados de faturas de energia elétrica brasileiras.
 
@@ -40,22 +45,12 @@ Analise os erros e reescreva o PROMPT com melhorias PRECISAS E MÍNIMAS para que
 
 
 def _extrair_prompt_atual() -> str:
-    texto = EXTRATOR_FILE.read_text(encoding="utf-8")
-    m = re.search(r'PROMPT\s*=\s*"""(.*?)"""', texto, re.DOTALL)
-    return m.group(1) if m else ""
+    return _extrator._carregar_prompt()
 
 
 def _atualizar_prompt(novo_prompt: str):
-    texto = EXTRATOR_FILE.read_text(encoding="utf-8")
-    # Escapa possíveis """ dentro do novo prompt
-    novo_prompt_safe = novo_prompt.replace('"""', "'''")
-    novo_texto = re.sub(
-        r'(PROMPT\s*=\s*""").*?(""")',
-        lambda m_: m_.group(1) + novo_prompt_safe + m_.group(2),
-        texto,
-        flags=re.DOTALL,
-    )
-    EXTRATOR_FILE.write_text(novo_texto, encoding="utf-8")
+    PROMPT_OVERRIDE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PROMPT_OVERRIDE_FILE.write_text(novo_prompt.strip(), encoding="utf-8")
 
 
 def _carregar_feedback_recente(max_casos: int = 15) -> list:
@@ -83,7 +78,7 @@ def melhorar():
 
     prompt_atual = _extrair_prompt_atual()
     if not prompt_atual:
-        print("[melhorar_prompt] PROMPT não encontrado em extrator.py")
+        print("[melhorar_prompt] PROMPT base não encontrado")
         return
 
     # Formata os casos de erro de forma legível
