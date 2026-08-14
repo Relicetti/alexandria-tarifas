@@ -871,11 +871,14 @@ function atualizarPainelCelesc() {
   const modal   = document.querySelector('[name=modalidade]')?.value || '';
   const isGC    = modal === 'Geração Compartilhada';
 
-  document.getElementById('bloco_celesc_gd2').style.display = visivel ? '' : 'none';
-  if (visivel) {
-    document.getElementById('celesc_gc_panel').style.display = isGC ? '' : 'none';
-    document.getElementById('celesc_ac_panel').style.display = isGC ? 'none' : '';
-  }
+  const bloco = document.getElementById('bloco_celesc_gd2');
+  const gc    = document.getElementById('celesc_gc_panel');
+  const ac    = document.getElementById('celesc_ac_panel');
+  if (!bloco) return;
+
+  bloco.style.display = visivel ? '' : 'none';
+  if (gc) gc.style.display = visivel && isGC  ? '' : 'none';
+  if (ac) ac.style.display = visivel && !isGC ? '' : 'none';
 }
 
 // Correção ICMS por dentro: 12% → 17%
