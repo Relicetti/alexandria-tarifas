@@ -23,6 +23,12 @@ import os
 import threading
 import traceback
 
+from dotenv import load_dotenv
+
+# Carrega agente_local/.env (TARIFAS_API_URL, ADMIN_TOKEN) ANTES de importar
+# preencher_lexdash, que lê essas variáveis de ambiente no import.
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -128,6 +134,17 @@ def gravar_lexdash_status():
         return jsonify(dict(_estado))
 
 
+_CERT = os.path.join(os.path.dirname(__file__), "cert.pem")
+_KEY = os.path.join(os.path.dirname(__file__), "key.pem")
+
+
 if __name__ == "__main__":
-    print(f"Agente local rodando em http://localhost:5002  (API: {pl.TARIFAS_API_URL})")
-    app.run(host="127.0.0.1", port=5002, debug=False)
+    if os.path.exists(_CERT) and os.path.exists(_KEY):
+        print(f"Agente local rodando em https://localhost:5002  (API: {pl.TARIFAS_API_URL})")
+        app.run(host="127.0.0.1", port=5002, debug=False, ssl_context=(_CERT, _KEY))
+    else:
+        print(f"Agente local rodando em http://localhost:5002  (API: {pl.TARIFAS_API_URL})")
+        print("!! cert.pem/key.pem não encontrados — rodando sem HTTPS.")
+        print("!! O dashboard chama https://localhost:5002: gere o certificado (veja README.md) "
+              "ou o botão 'Gravar no LexDash' não vai conseguir falar com este agente.")
+        app.run(host="127.0.0.1", port=5002, debug=False)

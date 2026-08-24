@@ -26,6 +26,10 @@ import json
 import os
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 import requests
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 

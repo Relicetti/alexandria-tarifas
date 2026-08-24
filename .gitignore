@@ -19,3 +19,6 @@ iniciar_servidor.bat
 # Agente local (LexDash)
 agente_local/lexdash_session.json
 agente_local/.venv/
+agente_local/cert.pem
+agente_local/key.pem
+agente_local/agente.log

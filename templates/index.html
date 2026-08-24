@@ -220,7 +220,7 @@ async function gravarFatura(faturaId, btn) {
 
   clearInterval(_gravarPoll);
 
-  const res = await fetch('http://localhost:5002/gravar-fatura', {
+  const res = await fetch('https://localhost:5002/gravar-fatura', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({fatura_id: faturaId})
@@ -237,7 +237,7 @@ async function gravarFatura(faturaId, btn) {
 
   _gravarPoll = setInterval(async () => {
     try {
-      const s = await fetch('http://localhost:5002/gravar-lexdash/status').then(r => r.json());
+      const s = await fetch('https://localhost:5002/gravar-lexdash/status').then(r => r.json());
       if (s.estado === 'rodando') {
         msgEl.textContent = '⏳ ' + (s.log || 'Processando…');
         return;
