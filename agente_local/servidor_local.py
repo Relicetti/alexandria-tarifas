@@ -21,6 +21,7 @@ Pré-requisito:
 import json
 import os
 import threading
+import traceback
 
 import requests
 from flask import Flask, jsonify, request
@@ -56,6 +57,8 @@ def _rodar(itens):
         pl.preencher(itens, log_fn=_append_log)
         _set_estado("ok")
     except Exception as e:
+        print("!! Erro durante preenchimento:")
+        traceback.print_exc()
         _append_log(f"ERRO: {e}")
         _set_estado("erro")
 
@@ -68,6 +71,8 @@ def gravar_lexdash():
     try:
         itens = pl._buscar_aprovados()
     except Exception as e:
+        print("!! Erro ao buscar aprovados:")
+        traceback.print_exc()
         return jsonify({"msg": f"Erro ao buscar aprovados: {e}"}), 500
 
     if not itens:
@@ -96,6 +101,8 @@ def gravar_fatura():
         resp.raise_for_status()
         fatura = resp.json()
     except Exception as e:
+        print(f"!! Erro ao buscar fatura {fatura_id} em {pl.TARIFAS_API_URL}:")
+        traceback.print_exc()
         return jsonify({"msg": f"Erro ao buscar fatura: {e}"}), 500
 
     if not fatura.get("tarifa_geracao"):
