@@ -15,3 +15,7 @@ ver_recentes.py
 debug_fatura.py
 abrir.vbs
 iniciar_servidor.bat
+
+# Agente local (LexDash)
+agente_local/lexdash_session.json
+agente_local/.venv/
