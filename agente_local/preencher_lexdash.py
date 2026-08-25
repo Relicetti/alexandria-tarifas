@@ -100,9 +100,23 @@ def _abrir_card_usina(pagina):
 
 
 def _campo_mes(pagina):
-    """Localiza o campo MES DE REFERENCIA (MM-AAAA), evitando cair num campo
-    qualquer da página quando os seletores por placeholder não batem — usa
-    como referência o próprio botão 'Ir', que fica sempre ao lado dele."""
+    """Localiza o campo MES DE REFERENCIA (MM-AAAA) e o botão 'Ir' associado.
+
+    O botão 'Ir' é a âncora principal: a página pode ter mais de um campo
+    parecido com "mês" (outro filtro, outra seção), e se o script escolher
+    por placeholder pode digitar num campo diferente do que o "Ir" de
+    verdade vai submeter — digita certo, mas clica no Ir errado (ou no Ir
+    certo, mas olhando pro campo errado), e o site acaba usando o mês que
+    já estava selecionado antes. Retorna (campo, botao_ir).
+    """
+    btn = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
+    if btn.count() > 0:
+        campo = btn.locator(
+            "xpath=preceding::input[1] | ../preceding-sibling::*//input | ../input"
+        ).first
+        if campo.count() > 0:
+            return campo, btn
+
     candidatos = [
         "input[placeholder*='mês'], input[placeholder*='mes']",
         "input[placeholder*='MM-YYYY'], input[placeholder*='MM-AAAA'], input[placeholder*='AAAA']",
@@ -111,18 +125,9 @@ def _campo_mes(pagina):
     for sel in candidatos:
         loc = pagina.locator(sel).first
         if loc.count() > 0:
-            return loc
+            return loc, btn
 
-    # fallback: input logo antes do botão "Ir" (mesmo container/linha)
-    btn = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
-    if btn.count() > 0:
-        loc = btn.locator(
-            "xpath=preceding::input[1] | ../preceding-sibling::*//input | ../input"
-        ).first
-        if loc.count() > 0:
-            return loc
-
-    return pagina.locator("input").first
+    return pagina.locator("input").first, btn
 
 
 def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
@@ -135,7 +140,7 @@ def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
         if log_fn:
             log_fn(msg)
 
-    campo = _campo_mes(pagina)
+    campo, btn_ir = _campo_mes(pagina)
 
     campo.click(timeout=5000, click_count=3)
     pagina.keyboard.press("Backspace")  # garante campo vazio antes de digitar
@@ -160,7 +165,16 @@ def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
             pass
         _log(f"Campo do mês agora: '{valor_atual}'.")
 
-    # clica no botão Ir
+    _log(f"Clicando em Ir com o campo mostrando '{valor_atual}'...")
+
+    # clica no MESMO botão Ir associado ao campo que acabou de ser preenchido
+    # (não busca de novo — evita clicar num "Ir" de outra seção da página)
+    if btn_ir.count() > 0:
+        btn_ir.click(timeout=5000)
+        pagina.wait_for_timeout(3000)
+        return
+
+    # fallback: procura qualquer botão "Ir" na página
     for sel in ["button:has-text('Ir')", "input[value='Ir']", "text=Ir"]:
         btn = pagina.locator(sel).first
         if btn.count() > 0:
