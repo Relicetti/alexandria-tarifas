@@ -51,10 +51,16 @@ cat > "$PLIST" <<EOF
     <key>ProgramArguments</key>
     <array>
         <string>$PYTHON</string>
+        <string>-u</string>
         <string>$DIR/servidor_local.py</string>
     </array>
     <key>WorkingDirectory</key>
     <string>$DIR</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
