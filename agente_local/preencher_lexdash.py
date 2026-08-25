@@ -335,6 +335,16 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         linha = pagina.locator(f"tr:has-text('{distribuidora}')").first
     if linha.count() == 0:
         _warn(f"Linha '{distribuidora}' nao encontrada no grid.")
+        try:
+            n_tr = pagina.locator("tr").count()
+            achou_texto = distribuidora.lower() in pagina.inner_text("body").lower()
+            _warn(f"Diagnostico: {n_tr} <tr> na pagina; texto '{distribuidora}' "
+                  f"aparece em algum lugar da pagina = {achou_texto}.")
+            primeiras = pagina.locator("tr").all_inner_texts()[:15]
+            for i, t in enumerate(primeiras):
+                _warn(f"  tr[{i}]: {t[:120]!r}")
+        except Exception as e:
+            _warn(f"Erro no diagnostico extra: {e}")
         return False
 
     preencheu = False
