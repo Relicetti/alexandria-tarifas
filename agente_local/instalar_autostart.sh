@@ -26,9 +26,11 @@ if [ ! -f "$DIR/.env" ]; then
 fi
 
 if [ ! -f "$DIR/cert.pem" ] || [ ! -f "$DIR/key.pem" ]; then
-  echo "Aviso: cert.pem/key.pem não existem ainda."
-  echo "Rode antes: mkcert -install && mkcert -cert-file cert.pem -key-file key.pem localhost 127.0.0.1 ::1"
-  exit 1
+  echo "Aviso: cert.pem/key.pem não existem — instalando mesmo assim, o agente vai"
+  echo "rodar em HTTP simples (funciona com o dashboard em produção hoje / Chrome)."
+  echo "Para habilitar HTTPS (necessário para Safari) depois:"
+  echo "  mkcert -install && mkcert -cert-file cert.pem -key-file key.pem localhost 127.0.0.1 ::1"
+  echo "  launchctl kickstart -k gui/\$(id -u)/com.alexandria.lexdash-agente"
 fi
 
 if [ ! -f "$DIR/lexdash_session.json" ]; then
