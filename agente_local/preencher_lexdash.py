@@ -24,6 +24,7 @@ Pré-requisito:
 import argparse
 import json
 import os
+import re
 import sys
 
 from dotenv import load_dotenv
@@ -65,7 +66,12 @@ def _marcar_preenchido(id: int):
 
 
 def _mes_ref_para_lex(mes_ref: str) -> str:
-    """'ago. de 2026' → '08-2026'"""
+    """'ago. de 2026' → '08-2026'; '2026-07-01' / '2026-07' → '07-2026'"""
+    m = re.match(r"^(\d{4})-(\d{2})(-\d{2})?$", mes_ref.strip())
+    if m:
+        ano, mes = m.group(1), m.group(2)
+        return f"{mes}-{ano}"
+
     partes = mes_ref.lower().replace(".", "").split()
     for p in partes:
         if p[:3] in _MESES_PT:
