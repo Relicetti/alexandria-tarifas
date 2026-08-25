@@ -198,20 +198,31 @@ def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
             pass
         _log(f"Campo do mês agora: '{valor_atual}'.")
 
-    _log(f"Clicando em Ir com o campo mostrando '{valor_atual}'...")
+    # tira o foco do campo (Tab) — alguns campos só disparam o evento que
+    # atualiza o estado/habilita o botão Ir no blur, não a cada tecla
+    pagina.keyboard.press("Tab")
+    pagina.wait_for_timeout(300)
+
+    n_ir = pagina.locator("button:has-text('Ir'), input[value='Ir']").count()
+    _log(f"Clicando em Ir com o campo mostrando '{valor_atual}' ({n_ir} botão(ões) 'Ir' na página)...")
 
     # clica no MESMO botão Ir associado ao campo que acabou de ser preenchido
     # (não busca de novo — evita clicar num "Ir" de outra seção da página)
     if btn_ir.count() > 0:
-        btn_ir.click(timeout=5000)
+        btn_ir.click(timeout=5000, force=True)
         pagina.wait_for_timeout(3000)
+        try:
+            valor_pos_ir = campo.input_value(timeout=2000)
+            _log(f"Campo do mês depois do clique em Ir: '{valor_pos_ir}'.")
+        except Exception:
+            pass
         return
 
     # fallback: procura qualquer botão "Ir" na página
     for sel in ["button:has-text('Ir')", "input[value='Ir']", "text=Ir"]:
         btn = pagina.locator(sel).first
         if btn.count() > 0:
-            btn.click(timeout=5000)
+            btn.click(timeout=5000, force=True)
             pagina.wait_for_timeout(3000)
             return
 
