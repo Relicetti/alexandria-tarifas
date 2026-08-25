@@ -102,20 +102,18 @@ def _abrir_card_usina(pagina):
 def _campo_mes(pagina):
     """Localiza o campo MES DE REFERENCIA (MM-AAAA) e o botão 'Ir' associado.
 
-    O botão 'Ir' é a âncora principal: a página pode ter mais de um campo
-    parecido com "mês" (outro filtro, outra seção), e se o script escolher
-    por placeholder pode digitar num campo diferente do que o "Ir" de
-    verdade vai submeter — digita certo, mas clica no Ir errado (ou no Ir
-    certo, mas olhando pro campo errado), e o site acaba usando o mês que
-    já estava selecionado antes. Retorna (campo, botao_ir).
+    Confirmado via dump de <input> da página real: o campo tem placeholder
+    exatamente 'MM-AAAA' (sem variação) — é o único campo de texto fora do
+    grid, além da busca do menu no topo ('Buscar menu...'). A heurística
+    anterior de "input antes do botão Ir" pegava esse campo de busca por
+    engano (o Ir fica mais perto dele na árvore do DOM do que do campo do
+    mês). Retorna (campo, botao_ir).
     """
     btn = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
-    if btn.count() > 0:
-        campo = btn.locator(
-            "xpath=preceding::input[1] | ../preceding-sibling::*//input | ../input"
-        ).first
-        if campo.count() > 0:
-            return campo, btn
+
+    campo = pagina.locator("input[placeholder='MM-AAAA']").first
+    if campo.count() > 0:
+        return campo, btn
 
     candidatos = [
         "input[placeholder*='mês'], input[placeholder*='mes']",
