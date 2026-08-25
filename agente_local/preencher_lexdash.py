@@ -238,7 +238,7 @@ def _aguardar_grid(pagina):
         )
     except PWTimeout:
         pass
-    pagina.wait_for_timeout(1000)
+    pagina.wait_for_timeout(2500)
 
 
 def _react_check(pagina, cb_locator, checked: bool):
@@ -325,8 +325,14 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         if log_fn:
             log_fn(f"!! {msg}")
 
-    # Localiza a linha por texto da distribuidora
+    # Localiza a linha por texto da distribuidora — o grid é gigante (milhares
+    # de campos) e pode ainda estar terminando de re-renderizar logo depois
+    # de trocar de mês, então tenta de novo antes de desistir.
     linha = pagina.locator(f"tr:has-text('{distribuidora}')").first
+    if linha.count() == 0:
+        _warn(f"Linha '{distribuidora}' nao encontrada — aguardando grid terminar de carregar e tentando de novo...")
+        pagina.wait_for_timeout(3000)
+        linha = pagina.locator(f"tr:has-text('{distribuidora}')").first
     if linha.count() == 0:
         _warn(f"Linha '{distribuidora}' nao encontrada no grid.")
         return False
