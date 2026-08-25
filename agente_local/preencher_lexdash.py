@@ -130,6 +130,39 @@ def _campo_mes(pagina):
     return pagina.locator("input").first, btn
 
 
+def _dump_inputs_debug(pagina, log_fn=None):
+    """Lista todos os <input> visíveis na página (id/name/placeholder/value)
+    para diagnóstico — usado quando o campo do mês não bate com o esperado."""
+    def _log(msg):
+        try:
+            print(msg)
+        except Exception:
+            pass
+        if log_fn:
+            log_fn(msg)
+
+    try:
+        infos = pagina.evaluate("""
+            () => Array.from(document.querySelectorAll('input')).map((el, i) => {
+                const r = el.getBoundingClientRect();
+                return {
+                    i, id: el.id, name: el.name, placeholder: el.placeholder,
+                    value: el.value, type: el.type,
+                    visible: r.width > 0 && r.height > 0,
+                    x: Math.round(r.x), y: Math.round(r.y),
+                };
+            })
+        """)
+        _log(f"--- DEBUG: {len(infos)} <input> na página ---")
+        for info in infos:
+            _log(f"  [{info['i']}] id='{info['id']}' name='{info['name']}' "
+                 f"placeholder='{info['placeholder']}' value='{info['value']}' "
+                 f"type='{info['type']}' visible={info['visible']} pos=({info['x']},{info['y']})")
+        _log("--- fim DEBUG ---")
+    except Exception as e:
+        _log(f"!! Erro no dump de inputs: {e}")
+
+
 def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
     """Preenche o campo MES DE REFERENCIA e clica Ir."""
     def _log(msg):
@@ -139,6 +172,8 @@ def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
             pass
         if log_fn:
             log_fn(msg)
+
+    _dump_inputs_debug(pagina, log_fn=log_fn)
 
     campo, btn_ir = _campo_mes(pagina)
 
