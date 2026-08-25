@@ -93,27 +93,66 @@ def _abrir_card_usina(pagina):
         raise RuntimeError("Card 'Atualizacao de tarifas usina' não encontrado.")
 
 
-def _selecionar_mes(pagina, mes_lex: str):
-    """Preenche o campo MES DE REFERENCIA e clica Ir."""
-    campo = pagina.locator("input[type='text'], input[type='month'], input").filter(
-        has_text=""
-    ).first
-
-    # tenta por placeholder ou label
-    for sel in [
+def _campo_mes(pagina):
+    """Localiza o campo MES DE REFERENCIA (MM-AAAA), evitando cair num campo
+    qualquer da página quando os seletores por placeholder não batem — usa
+    como referência o próprio botão 'Ir', que fica sempre ao lado dele."""
+    candidatos = [
         "input[placeholder*='mês'], input[placeholder*='mes']",
-        "input[placeholder*='MM-YYYY'], input[placeholder*='MM-AAAA']",
+        "input[placeholder*='MM-YYYY'], input[placeholder*='MM-AAAA'], input[placeholder*='AAAA']",
         "input[name*='mes'], input[name*='mes_referencia']",
-        "input",
-    ]:
+    ]
+    for sel in candidatos:
         loc = pagina.locator(sel).first
         if loc.count() > 0:
-            try:
-                loc.click(timeout=5000, click_count=3)
-                loc.type(mes_lex, delay=50)
-                break
-            except Exception:
-                continue
+            return loc
+
+    # fallback: input logo antes do botão "Ir" (mesmo container/linha)
+    btn = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
+    if btn.count() > 0:
+        loc = btn.locator(
+            "xpath=preceding::input[1] | ../preceding-sibling::*//input | ../input"
+        ).first
+        if loc.count() > 0:
+            return loc
+
+    return pagina.locator("input").first
+
+
+def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
+    """Preenche o campo MES DE REFERENCIA e clica Ir."""
+    def _log(msg):
+        try:
+            print(msg)
+        except Exception:
+            pass
+        if log_fn:
+            log_fn(msg)
+
+    campo = _campo_mes(pagina)
+
+    campo.click(timeout=5000, click_count=3)
+    pagina.keyboard.press("Backspace")  # garante campo vazio antes de digitar
+    campo.type(mes_lex, delay=80)
+    pagina.wait_for_timeout(300)
+
+    valor_atual = ""
+    try:
+        valor_atual = campo.input_value(timeout=2000)
+    except Exception:
+        pass
+
+    if valor_atual != mes_lex:
+        _log(f"!! Campo do mês ficou '{valor_atual}' (esperado '{mes_lex}') — tentando de novo com só dígitos.")
+        campo.click(timeout=5000, click_count=3)
+        pagina.keyboard.press("Backspace")
+        campo.type("".join(c for c in mes_lex if c.isdigit()), delay=80)
+        pagina.wait_for_timeout(300)
+        try:
+            valor_atual = campo.input_value(timeout=2000)
+        except Exception:
+            pass
+        _log(f"Campo do mês agora: '{valor_atual}'.")
 
     # clica no botão Ir
     for sel in ["button:has-text('Ir')", "input[value='Ir']", "text=Ir"]:
@@ -419,7 +458,7 @@ def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
 
         for mes_lex, tipos in por_mes.items():
             _log(f"Mes {mes_lex}…")
-            _selecionar_mes(pagina, mes_lex)
+            _selecionar_mes(pagina, mes_lex, log_fn=log_fn)
             _aguardar_grid(pagina)
 
             for tipo in ["GD1", "GD2", "CacauShow"]:
