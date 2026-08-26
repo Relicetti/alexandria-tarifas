@@ -309,6 +309,27 @@ def _escopo_modalidade(td, modalidade: str):
     return td
 
 
+# Apelidos conhecidos: o grid do LexDash abrevia algumas distribuidoras
+# (ex.: "Energisa Sul Sudeste" aparece como "ESS"). Adicione aqui outros
+# casos confirmados; para os desconhecidos, tenta as iniciais automaticamente.
+_APELIDOS_GRID = {
+    "Energisa Sul Sudeste": "ESS",
+}
+
+
+def _nomes_candidatos(distribuidora: str) -> list:
+    """Nomes a tentar no grid, na ordem: nome completo, apelido conhecido,
+    e iniciais calculadas (ex.: 'Energisa Sul Sudeste' -> 'ESS')."""
+    candidatos = [distribuidora]
+    apelido = _APELIDOS_GRID.get(distribuidora)
+    if apelido:
+        candidatos.append(apelido)
+    iniciais = "".join(p[0].upper() for p in distribuidora.split() if p)
+    if len(iniciais) >= 2 and iniciais not in candidatos:
+        candidatos.append(iniciais)
+    return candidatos
+
+
 def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, modalidade: str = "", log_fn=None):
     """
     Encontra a linha da distribuidora no grid, marca os checkboxes e preenche o valor
@@ -325,16 +346,30 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         if log_fn:
             log_fn(f"!! {msg}")
 
-    # Localiza a linha por texto da distribuidora — o grid é gigante (milhares
-    # de campos) e pode ainda estar terminando de re-renderizar logo depois
-    # de trocar de mês, então tenta de novo antes de desistir.
-    linha = pagina.locator(f"tr:has-text('{distribuidora}')").first
-    if linha.count() == 0:
-        _warn(f"Linha '{distribuidora}' nao encontrada — aguardando grid terminar de carregar e tentando de novo...")
-        pagina.wait_for_timeout(3000)
-        linha = pagina.locator(f"tr:has-text('{distribuidora}')").first
-    if linha.count() == 0:
-        _warn(f"Linha '{distribuidora}' nao encontrada no grid.")
+    # Localiza a linha por texto da distribuidora. O grid do LexDash abrevia
+    # algumas distribuidoras (ex.: "Energisa Sul Sudeste" vira "ESS"), então
+    # tenta o nome completo, o apelido conhecido e as iniciais, nessa ordem.
+    # Também tenta de novo com pausa: o grid é gigante e pode ainda estar
+    # terminando de re-renderizar logo depois de trocar de mês.
+    candidatos_nome = _nomes_candidatos(distribuidora)
+    linha = None
+    nome_usado = None
+    for tentativa in range(2):
+        for nome in candidatos_nome:
+            loc = pagina.locator(f"tr:has-text('{nome}')").first
+            if loc.count() > 0:
+                linha = loc
+                nome_usado = nome
+                break
+        if linha is not None:
+            break
+        if tentativa == 0:
+            _warn(f"Linha '{distribuidora}' nao encontrada (tentei {candidatos_nome}) "
+                  f"— aguardando grid terminar de carregar e tentando de novo...")
+            pagina.wait_for_timeout(3000)
+
+    if linha is None:
+        _warn(f"Linha '{distribuidora}' nao encontrada no grid (tentei {candidatos_nome}).")
         try:
             n_tr = pagina.locator("tr").count()
             achou_texto = distribuidora.lower() in pagina.inner_text("body").lower()
@@ -346,6 +381,9 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         except Exception as e:
             _warn(f"Erro no diagnostico extra: {e}")
         return False
+
+    if nome_usado != distribuidora:
+        _warn(f"Achei a linha usando '{nome_usado}' (em vez de '{distribuidora}').")
 
     preencheu = False
     valor_str = f"{valor:.6f}".replace(".", ",")
