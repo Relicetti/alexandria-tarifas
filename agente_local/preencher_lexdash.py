@@ -313,7 +313,7 @@ def _escopo_modalidade(td, modalidade: str):
 # (ex.: "Energisa Sul Sudeste" aparece como "ESS"). Adicione aqui outros
 # casos confirmados; para os desconhecidos, tenta as iniciais automaticamente.
 _APELIDOS_GRID = {
-    "Energisa Sul Sudeste": "ESS",
+    "Energisa Sul Sudeste": "Energisa Sul-Sudeste",  # grid usa hífen, não espaço
 }
 
 
