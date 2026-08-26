@@ -472,6 +472,16 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         except Exception as e:
             _warn(f"Erro ao preencher usina {usina_id}: {e}")
 
+    if preencheu:
+        # Rola a linha preenchida pro centro da tela — usa a MESMA linha já
+        # encontrada (nome_usado pode ser o apelido/iniciais, não o nome
+        # original, então buscar de novo pelo nome original não acha nada).
+        try:
+            linha.scroll_into_view_if_needed(timeout=3000)
+            pagina.wait_for_timeout(300)
+        except Exception:
+            pass
+
     return preencheu
 
 
@@ -615,13 +625,6 @@ def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
                     ok = _preencher_linha(pagina, item["distribuidora"], usinas, tarifa, modalidade=modalidade, log_fn=log_fn)
                     if ok:
                         algum = True
-                        # Rola a linha preenchida para o centro da tela
-                        try:
-                            linha = pagina.locator(f"tr:has-text('{item['distribuidora']}')").first
-                            linha.scroll_into_view_if_needed(timeout=3000)
-                            pagina.wait_for_timeout(300)
-                        except Exception:
-                            pass
 
                 if algum:
                     # Detecta Salvar via rede: aguarda o usuário clicar
