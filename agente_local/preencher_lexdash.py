@@ -375,9 +375,23 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
             achou_texto = distribuidora.lower() in pagina.inner_text("body").lower()
             _warn(f"Diagnostico: {n_tr} <tr> na pagina; texto '{distribuidora}' "
                   f"aparece em algum lugar da pagina = {achou_texto}.")
-            primeiras = pagina.locator("tr").all_inner_texts()[:15]
-            for i, t in enumerate(primeiras):
-                _warn(f"  tr[{i}]: {t[:120]!r}")
+            # Filtra linhas que contenham algum pedaço do nome (ex.: 'Energisa'),
+            # em vez de só as primeiras — o nome real pode estar em qualquer lugar
+            # das ~100 linhas do grid.
+            palavras = [p for p in distribuidora.split() if len(p) >= 4]
+            todas = pagina.locator("tr").all_inner_texts()
+            relevantes = [
+                (i, t) for i, t in enumerate(todas)
+                if any(p.lower() in t.lower() for p in palavras)
+            ]
+            if relevantes:
+                _warn(f"Linhas que batem com alguma palavra de '{distribuidora}':")
+                for i, t in relevantes[:10]:
+                    _warn(f"  tr[{i}]: {t.splitlines()[0][:120]!r}")
+            else:
+                _warn(f"Nenhuma linha contém nenhuma palavra de '{distribuidora}'. Primeiras 15 linhas do grid:")
+                for i, t in enumerate(todas[:15]):
+                    _warn(f"  tr[{i}]: {t.splitlines()[0][:120]!r}")
         except Exception as e:
             _warn(f"Erro no diagnostico extra: {e}")
         return False
