@@ -128,6 +128,8 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
             try:
                 btn_el = btn.element_handle(timeout=3000)
                 if btn_el:
+                    disabled = pagina.evaluate("(el) => el.disabled === true || el.getAttribute('aria-disabled') === 'true'", btn_el)
+                    _log(f"Diagnostico: botão {sel!r} encontrado, disabled={disabled}.")
                     pagina.evaluate("(el) => el.click()", btn_el)
                     clicou = True
                     sel_usado = sel
@@ -158,6 +160,16 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
 
     # confirma que saiu da tela de login (URL não é mais /login)
     if "login" in pagina.url.lower():
+        try:
+            texto = pagina.inner_text("body")
+            palavras_erro = ["inválid", "incorret", "erro", "falhou", "senha", "credencia", "obrigatório", "required"]
+            trechos = [
+                linha.strip() for linha in texto.splitlines()
+                if linha.strip() and any(p in linha.lower() for p in palavras_erro)
+            ]
+            _log(f"Diagnostico: possíveis mensagens de erro na tela: {trechos[:10]}")
+        except Exception as e:
+            _log(f"Erro no diagnostico de mensagens: {e}")
         _log(f"!! Login automático: ainda na tela de login depois do submit (url={pagina.url}) — provavelmente falhou.")
         return False
 
