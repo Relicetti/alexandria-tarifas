@@ -533,6 +533,59 @@ def _tipo_passagem(item: dict) -> str:
     return "GD1"
 
 
+def _abrir_sessao_valida(p, log_fn=None):
+    """Abre o navegador com a sessão salva, navega até a tela de atualização
+    de tarifas e confere se a sessão ainda é válida. Se estiver expirada e
+    LEXDASH_USER/LEXDASH_PASS estiverem configurados, tenta logar de novo
+    sozinho (sem janela visível) e tenta abrir mais uma vez antes de
+    desistir. Retorna (navegador, pagina)."""
+    def _log(msg):
+        try:
+            print(msg)
+        except Exception:
+            pass
+        if log_fn:
+            log_fn(msg)
+
+    for tentativa in range(2):
+        navegador = p.webkit.launch(headless=False)
+        contexto = navegador.new_context(storage_state=ARQUIVO_SESSAO, viewport=None)
+        pagina = contexto.new_page()
+
+        _log(f"Navegando para {URL_ATUALIZACOES}…")
+        pagina.goto(URL_ATUALIZACOES, timeout=20000, wait_until="domcontentloaded")
+        pagina.wait_for_timeout(1000)
+        # Maximiza e reseta zoom via JS
+        pagina.evaluate("""() => {
+            window.moveTo(0, 0);
+            window.resizeTo(screen.availWidth, screen.availHeight);
+        }""")
+        pagina.keyboard.press("Meta+0")
+        pagina.wait_for_timeout(500)
+
+        url_atual = pagina.url.lower()
+        if "login" in url_atual or "signin" in url_atual or "auth" in url_atual:
+            navegador.close()
+            if tentativa == 0 and os.environ.get("LEXDASH_USER") and os.environ.get("LEXDASH_PASS"):
+                _log("Sessao expirada — tentando logar de novo automaticamente...")
+                import login_lexdash as _login
+                if _login.fazer_login(headless=True, log_fn=log_fn):
+                    _log("Login automático OK, abrindo de novo...")
+                    continue
+                _log("Login automático falhou.")
+            raise RuntimeError(
+                "Sessao expirada. Rode login_lexdash.py de novo "
+                "(ou configure LEXDASH_USER/LEXDASH_PASS no .env para relogar sozinho)."
+            )
+        if "fatger" not in url_atual and "atualizacao" not in url_atual:
+            navegador.close()
+            raise RuntimeError(f"URL inesperada: {pagina.url}")
+
+        return navegador, pagina
+
+    raise RuntimeError("Não foi possível abrir uma sessão válida do LexDash.")
+
+
 def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
     """
     log_fn(msg): callback chamado a cada etapa — útil para atualizar status em tempo real.
@@ -547,7 +600,13 @@ def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
             log_fn(msg)
 
     if not os.path.exists(ARQUIVO_SESSAO):
-        raise RuntimeError("Sessão não encontrada. Rode login_lexdash.py primeiro.")
+        if os.environ.get("LEXDASH_USER") and os.environ.get("LEXDASH_PASS"):
+            _log("Sessão não encontrada — fazendo login automático...")
+            import login_lexdash as _login
+            if not _login.fazer_login(headless=True, log_fn=log_fn):
+                raise RuntimeError("Login automático falhou. Rode login_lexdash.py manualmente.")
+        else:
+            raise RuntimeError("Sessão não encontrada. Rode login_lexdash.py primeiro.")
 
     # Agrupa por mês_lex → tipo → lista de itens
     por_mes: dict[str, dict[str, list]] = {}
@@ -570,29 +629,7 @@ def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
     # WebKit é o motor do Playwright mais próximo do Safari (não é o Safari
     # instalado no Mac — não compartilha cookies/login com ele).
     with sync_playwright() as p:
-        navegador = p.webkit.launch(headless=False)
-        contexto = navegador.new_context(storage_state=ARQUIVO_SESSAO, viewport=None)
-        pagina   = contexto.new_page()
-
-
-        _log(f"Navegando para {URL_ATUALIZACOES}…")
-        pagina.goto(URL_ATUALIZACOES, timeout=20000, wait_until="domcontentloaded")
-        pagina.wait_for_timeout(1000)
-        # Maximiza e reseta zoom via JS
-        pagina.evaluate("""() => {
-            window.moveTo(0, 0);
-            window.resizeTo(screen.availWidth, screen.availHeight);
-        }""")
-        pagina.keyboard.press("Meta+0")
-        pagina.wait_for_timeout(500)
-
-        url_atual = pagina.url.lower()
-        if "login" in url_atual or "signin" in url_atual or "auth" in url_atual:
-            navegador.close()
-            raise RuntimeError("Sessao expirada. Rode login_lexdash.py de novo.")
-        if "fatger" not in url_atual and "atualizacao" not in url_atual:
-            navegador.close()
-            raise RuntimeError(f"URL inesperada: {pagina.url}")
+        navegador, pagina = _abrir_sessao_valida(p, log_fn=log_fn)
 
         _log("Abrindo card de tarifas…")
         _abrir_card_usina(pagina)

@@ -49,9 +49,15 @@ LexDash.
    cat > .env <<'EOF'
    TARIFAS_API_URL=https://alexandria-tarifas-production.up.railway.app
    ADMIN_TOKEN=alex-upload-2026
+   LEXDASH_USER=seu-usuario-do-lexdash
+   LEXDASH_PASS=sua-senha-do-lexdash
    EOF
    ```
-   Esse arquivo não é versionado (está no `.gitignore`).
+   Esse arquivo não é versionado (está no `.gitignore`) — mas fica em texto
+   puro nesta pasta do seu Mac. `LEXDASH_USER`/`LEXDASH_PASS` são opcionais:
+   com eles, o agente reloga sozinho no LexDash quando a sessão expira (sem
+   precisar rodar `login_lexdash.py` manualmente); sem eles, o login continua
+   manual como antes.
 
 5. **Faça login uma vez** para salvar a sessão do LexDash:
    ```bash
@@ -77,8 +83,12 @@ e o navegador automatizado abre sozinho.
   acompanhar em tempo real).
 - **Reiniciar o agente** (ex.: depois de um `git pull` com mudanças no
   código): `launchctl kickstart -k gui/$(id -u)/com.alexandria.lexdash-agente`
-- **Sessão do LexDash expirou** ("Sessao expirada" no log): rode
-  `python login_lexdash.py` de novo e reinicie o agente (comando acima).
+- **Sessão do LexDash expirou** ("Sessao expirada" no log): se
+  `LEXDASH_USER`/`LEXDASH_PASS` estiverem no `.env`, o agente reloga sozinho
+  automaticamente na próxima tentativa — não precisa fazer nada. Se não
+  estiverem configurados (ou se o login automático falhar, ex.: LexDash
+  mudou a tela de login), rode `python login_lexdash.py` manualmente e
+  reinicie o agente (comando acima).
 - **Desinstalar o autostart**: `./desinstalar_autostart.sh`
 
 ## Rodar manualmente pela linha de comando (sem o dashboard)
