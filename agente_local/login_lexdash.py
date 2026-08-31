@@ -103,14 +103,24 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
 
     pagina.wait_for_timeout(300)
 
+    try:
+        v_user = campo_usuario.input_value(timeout=2000)
+        v_senha_len = len(campo_senha.input_value(timeout=2000) or "")
+        _log(f"Diagnostico: campo usuario='{v_user}' campo senha tem {v_senha_len} caractere(s).")
+    except Exception:
+        pass
+
     # Clica no botão de submit também via JS (o clique "de verdade" do
     # Playwright teria o mesmo problema de visibilidade).
     clicou = False
+    sel_usado = None
     for sel in [
         "button[type='submit']",
         "button:has-text('Entrar')",
         "button:has-text('Login')",
         "button:has-text('Acessar')",
+        "button:has-text('Continuar')",
+        "button:has-text('Fazer login')",
         "input[type='submit']",
     ]:
         btn = pagina.locator(sel).first
@@ -120,9 +130,20 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
                 if btn_el:
                     pagina.evaluate("(el) => el.click()", btn_el)
                     clicou = True
+                    sel_usado = sel
                     break
             except Exception:
                 continue
+
+    if clicou:
+        _log(f"Diagnostico: cliquei no botão via seletor {sel_usado!r}.")
+    else:
+        try:
+            botoes = pagina.locator("button").all_inner_texts()
+            _log(f"Diagnostico: nenhum botão de submit bateu nos seletores conhecidos. Botões na página: {botoes}")
+        except Exception:
+            pass
+
     if not clicou:
         # último recurso: dá Enter no campo de senha via JS (dispatch de keydown)
         try:
