@@ -250,11 +250,28 @@ def form_fatura(id=None):
         from concessionarias import normalizar_distribuidora
         data["distribuidora"] = normalizar_distribuidora(data["distribuidora"])
 
+        # Extração original: vem do form (_extraido_json) quando a fatura acabou
+        # de passar pelo upload/IA; numa edição posterior de uma fatura já
+        # salva, esse campo não existe mais (era um token de uso único) — nesse
+        # caso reaproveita o snapshot persistido na própria fatura, para que
+        # correções feitas em edições futuras também virem feedback pra IA.
         extraido_json = request.form.get("_extraido_json")
         _log_debug(f"_extraido_json presente={bool(extraido_json)} tamanho={len(extraido_json) if extraido_json else 0}")
+        extraido_orig = None
         if extraido_json:
             try:
                 extraido_orig = json.loads(extraido_json)
+            except Exception as e:
+                import traceback
+                _log_debug(f"ERRO parse _extraido_json: {e}\n{traceback.format_exc()}")
+        if extraido_orig is None and fatura and fatura["extraido_original_json"]:
+            try:
+                extraido_orig = json.loads(fatura["extraido_original_json"])
+            except Exception as e:
+                _log_debug(f"ERRO parse extraido_original_json persistido: {e}")
+
+        if extraido_orig:
+            try:
                 extraido_orig["grupo"] = extraido_orig.get("grupo") or grupo
                 _registrar_feedback(extraido_orig, data)
             except Exception as e:
@@ -269,14 +286,22 @@ def form_fatura(id=None):
                     data["instalacao"], data["mes_referencia"]
                 )
                 if existente:
-                    db.salvar_fatura(data, existente["id"])
+                    fatura_id = existente["id"]
+                    db.salvar_fatura(data, fatura_id)
                     flash("Fatura existente atualizada.", "success")
                 else:
-                    db.salvar_fatura(data, id)
+                    fatura_id = db.salvar_fatura(data, id)
                     flash("Fatura salva.", "success")
             else:
+                fatura_id = id
                 db.salvar_fatura(data, id)
                 flash("Fatura salva.", "success")
+
+            # Persiste a extração original (só quando esta requisição trouxe
+            # uma extração de verdade — não sobrescreve o snapshot já salvo
+            # numa edição que não passou por upload).
+            if extraido_json and extraido_orig:
+                db.set_extraido_original(fatura_id, json.dumps(extraido_orig, ensure_ascii=False))
             # Aprova o pendente se veio da tela de revisão
             pendente_id = request.form.get("_pendente_id")
             if pendente_id:
