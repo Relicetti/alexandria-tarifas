@@ -68,27 +68,43 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         _log("!! Login automático: campo de senha não encontrado.")
         return False
 
-    # A página de login tem uma transição/animação inicial — o campo existe
-    # no HTML antes de ficar visível. Espera de verdade (até 15s) antes de
-    # clicar, em vez de tentar direto e estourar timeout.
+    # A tela de login tem alguma animação/transição de entrada que não roda
+    # (ou não termina) em modo headless — o campo existe no HTML mas nunca
+    # fica "visível" pros critérios do Playwright, então clicar/fill()
+    # trava em timeout. Preenche direto via JS (native setter + eventos de
+    # input/change), o mesmo truque já usado no preenchimento do grid de
+    # tarifas — funciona independente de o elemento estar "visível" ou não.
+    def _set_via_js(campo, valor):
+        el = campo.element_handle(timeout=5000)
+        if not el:
+            return False
+        pagina.evaluate("""
+            ([el, val]) => {
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                setter.call(el, val);
+                el.dispatchEvent(new Event('input',  {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        """, [el, valor])
+        return True
+
     try:
-        campo_usuario.wait_for(state="visible", timeout=15000)
-    except Exception:
-        _log("!! Login automático: campo de usuário não ficou visível a tempo.")
-        try:
-            vp = pagina.viewport_size
-            box = campo_usuario.bounding_box()
-            _log(f"Diagnostico: viewport={vp} bounding_box_do_campo={box} url={pagina.url}")
-        except Exception as e:
-            _log(f"Erro no diagnostico: {e}")
+        if not _set_via_js(campo_usuario, usuario):
+            _log("!! Login automático: não consegui pegar o elemento do campo de usuário.")
+            return False
+        if not _set_via_js(campo_senha, senha):
+            _log("!! Login automático: não consegui pegar o elemento do campo de senha.")
+            return False
+    except Exception as e:
+        _log(f"!! Login automático: erro preenchendo campos via JS: {e}")
         return False
 
-    campo_usuario.click(timeout=5000)
-    campo_usuario.fill(usuario)
-    campo_senha.wait_for(state="visible", timeout=5000)
-    campo_senha.click(timeout=5000)
-    campo_senha.fill(senha)
+    pagina.wait_for_timeout(300)
 
+    # Clica no botão de submit também via JS (o clique "de verdade" do
+    # Playwright teria o mesmo problema de visibilidade).
     clicou = False
     for sel in [
         "button[type='submit']",
@@ -99,17 +115,29 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     ]:
         btn = pagina.locator(sel).first
         if btn.count() > 0:
-            btn.click(timeout=5000)
-            clicou = True
-            break
+            try:
+                btn_el = btn.element_handle(timeout=3000)
+                if btn_el:
+                    pagina.evaluate("(el) => el.click()", btn_el)
+                    clicou = True
+                    break
+            except Exception:
+                continue
     if not clicou:
-        campo_senha.press("Enter")
+        # último recurso: dá Enter no campo de senha via JS (dispatch de keydown)
+        try:
+            senha_el = campo_senha.element_handle(timeout=3000)
+            pagina.evaluate("""
+                (el) => el.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))
+            """, senha_el)
+        except Exception:
+            pass
 
     pagina.wait_for_timeout(3000)
 
-    # confirma que saiu da tela de login (campo de senha sumiu)
-    if pagina.locator("input[type='password']").count() > 0:
-        _log("!! Login automático: campo de senha ainda visível depois do submit — provavelmente falhou.")
+    # confirma que saiu da tela de login (URL não é mais /login)
+    if "login" in pagina.url.lower():
+        _log(f"!! Login automático: ainda na tela de login depois do submit (url={pagina.url}) — provavelmente falhou.")
         return False
 
     return True
