@@ -75,6 +75,12 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         campo_usuario.wait_for(state="visible", timeout=15000)
     except Exception:
         _log("!! Login automático: campo de usuário não ficou visível a tempo.")
+        try:
+            vp = pagina.viewport_size
+            box = campo_usuario.bounding_box()
+            _log(f"Diagnostico: viewport={vp} bounding_box_do_campo={box} url={pagina.url}")
+        except Exception as e:
+            _log(f"Erro no diagnostico: {e}")
         return False
 
     campo_usuario.click(timeout=5000)
@@ -126,7 +132,11 @@ def fazer_login(headless: bool = False, log_fn=None) -> bool:
 
     with sync_playwright() as p:
         navegador = p.webkit.launch(headless=headless)
-        contexto = navegador.new_context(viewport=None)
+        # Em modo headless não existe janela real pra "viewport=None" seguir
+        # (usaria o tamanho da janela do sistema) — fixa um tamanho de
+        # desktop explícito pra não cair num layout mobile que esconde os
+        # campos do formulário.
+        contexto = navegador.new_context(viewport=None if not headless else {"width": 1440, "height": 900})
         pagina = contexto.new_page()
         pagina.goto(URL_LOGIN, timeout=30000, wait_until="domcontentloaded")
 
