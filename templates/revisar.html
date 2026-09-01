@@ -206,7 +206,7 @@ async function gravarLexDash() {
   logEl.classList.add('d-none');
 
   // Dispara o job no servidor local
-  const res = await fetch('http://localhost:5002/gravar-lexdash', {method: 'POST'});
+  const res = await fetch('https://localhost:5002/gravar-lexdash', {method: 'POST'});
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     msgEl.innerHTML = `<span class="text-danger">❌ ${j.msg || 'Erro ao iniciar.'}</span>`;
@@ -218,7 +218,7 @@ async function gravarLexDash() {
   // Polling de status
   const poll = setInterval(async () => {
     try {
-      const s = await fetch('http://localhost:5002/gravar-lexdash/status').then(r => r.json());
+      const s = await fetch('https://localhost:5002/gravar-lexdash/status').then(r => r.json());
       if (s.estado === 'rodando') {
         msgEl.innerHTML = `<span class="text-warning">⏳ ${s.log || 'Processando…'}</span>`;
         return;

@@ -126,6 +126,7 @@ _INLINE_COLS = [
     ("tipo_gd",     "TEXT DEFAULT 'GD1'"),
     ("modalidade",  "TEXT DEFAULT 'Geração Compartilhada'"),
     ("impostos_com_desconto", "INTEGER NOT NULL DEFAULT 0"),
+    ("extraido_original_json", "TEXT"),  # snapshot da extração IA, p/ feedback em edições futuras
 ]
 
 
@@ -428,6 +429,14 @@ def get_meses_disponiveis():
             "SELECT DISTINCT mes_referencia FROM faturas ORDER BY mes_referencia DESC"
         ).fetchall()
         return [r["mes_referencia"] for r in rows]
+
+
+def set_extraido_original(id, extraido_json: str):
+    """Persiste o snapshot da extração IA original na fatura, para permitir
+    registrar feedback de correções feitas em edições futuras (não só na
+    primeira gravação, vinda do upload)."""
+    with get_conn() as conn:
+        conn.execute("UPDATE faturas SET extraido_original_json=? WHERE id=?", (extraido_json, id))
 
 
 def deletar_fatura(id):
