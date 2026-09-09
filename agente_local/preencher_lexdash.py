@@ -569,7 +569,11 @@ def _abrir_sessao_valida(p, log_fn=None):
             if tentativa == 0 and os.environ.get("LEXDASH_USER") and os.environ.get("LEXDASH_PASS"):
                 _log("Sessao expirada — tentando logar de novo automaticamente...")
                 import login_lexdash as _login
-                if _login.fazer_login(headless=True, log_fn=log_fn):
+                # Usa _fazer_login_com_p (reaproveitando o `p` já aberto por
+                # quem chamou _abrir_sessao_valida) em vez de fazer_login(),
+                # que abriria um segundo Playwright na mesma thread e
+                # estouraria "Playwright Sync API inside the asyncio loop".
+                if _login._fazer_login_com_p(p, headless=True, log_fn=log_fn):
                     _log("Login automático OK, abrindo de novo...")
                     continue
                 _log("Login automático falhou.")
