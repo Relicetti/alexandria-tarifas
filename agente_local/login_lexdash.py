@@ -43,6 +43,9 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         if log_fn:
             log_fn(msg)
 
+    _log(f"Diagnostico: _login_automatico recebeu usuario com {len(usuario) if usuario else 0} "
+         f"caractere(s) e senha com {len(senha) if senha else 0} caractere(s).")
+
     campos_usuario = [
         "input[type='email']",
         "input[name*='user' i]",
@@ -63,7 +66,9 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         _log("!! Login automático: campo de usuário não encontrado.")
         return False
 
-    campo_senha = pagina.locator("input[type='password']").first
+    campo_senha_todos = pagina.locator("input[type='password']")
+    _log(f"Diagnostico: {campo_senha_todos.count()} campo(s) input[type='password'] na página.")
+    campo_senha = campo_senha_todos.first
     if campo_senha.count() == 0:
         _log("!! Login automático: campo de senha não encontrado.")
         return False
@@ -198,6 +203,8 @@ def _fazer_login_com_p(p, headless: bool = False, log_fn=None) -> bool:
 
     usuario = os.environ.get("LEXDASH_USER")
     senha = os.environ.get("LEXDASH_PASS")
+    _log(f"Diagnostico: LEXDASH_USER lido do .env tem {len(usuario) if usuario else 0} caractere(s); "
+         f"LEXDASH_PASS tem {len(senha) if senha else 0} caractere(s).")
 
     navegador = p.webkit.launch(headless=headless)
     # Em modo headless não existe janela real pra "viewport=None" seguir
