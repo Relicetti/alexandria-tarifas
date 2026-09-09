@@ -46,15 +46,23 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     _log(f"Diagnostico: _login_automatico recebeu usuario com {len(usuario) if usuario else 0} "
          f"caractere(s) e senha com {len(senha) if senha else 0} caractere(s).")
 
+    # A tela de login existe em DOM duplicado (uma variante pra layout
+    # mobile, outra pra desktop — só uma fica visível por vez via CSS
+    # responsivo, mas as duas continuam montadas com o mesmo id/name).
+    # Pegar ".first" sem filtrar visibilidade cai na variante escondida:
+    # o preenchimento via JS funciona (não depende de visibilidade), mas
+    # quem é submetido de fato é a outra, que fica vazia. Por isso todo
+    # seletor abaixo usa ":visible" (extensão do próprio Playwright) pra
+    # sempre pegar a instância realmente exibida na tela.
     campos_usuario = [
-        "input[type='email']",
-        "input[name*='user' i]",
-        "input[name*='login' i]",
-        "input[placeholder*='usuário' i]",
-        "input[placeholder*='usuario' i]",
-        "input[placeholder*='email' i]",
-        "input[placeholder*='e-mail' i]",
-        "input[type='text']",
+        "input[type='email']:visible",
+        "input[name*='user' i]:visible",
+        "input[name*='login' i]:visible",
+        "input[placeholder*='usuário' i]:visible",
+        "input[placeholder*='usuario' i]:visible",
+        "input[placeholder*='email' i]:visible",
+        "input[placeholder*='e-mail' i]:visible",
+        "input[type='text']:visible",
     ]
     campo_usuario = None
     for sel in campos_usuario:
@@ -67,8 +75,10 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         return False
 
     campo_senha_todos = pagina.locator("input[type='password']")
-    _log(f"Diagnostico: {campo_senha_todos.count()} campo(s) input[type='password'] na página.")
-    campo_senha = campo_senha_todos.first
+    campo_senha_visiveis = pagina.locator("input[type='password']:visible")
+    _log(f"Diagnostico: {campo_senha_todos.count()} campo(s) input[type='password'] na página "
+         f"({campo_senha_visiveis.count()} visível(is)).")
+    campo_senha = campo_senha_visiveis.first
     if campo_senha.count() == 0:
         _log("!! Login automático: campo de senha não encontrado.")
         return False
@@ -120,13 +130,13 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     clicou = False
     sel_usado = None
     for sel in [
-        "button[type='submit']",
-        "button:has-text('Entrar')",
-        "button:has-text('Login')",
-        "button:has-text('Acessar')",
-        "button:has-text('Continuar')",
-        "button:has-text('Fazer login')",
-        "input[type='submit']",
+        "button[type='submit']:visible",
+        "button:has-text('Entrar'):visible",
+        "button:has-text('Login'):visible",
+        "button:has-text('Acessar'):visible",
+        "button:has-text('Continuar'):visible",
+        "button:has-text('Fazer login'):visible",
+        "input[type='submit']:visible",
     ]:
         btn = pagina.locator(sel).first
         if btn.count() > 0:
