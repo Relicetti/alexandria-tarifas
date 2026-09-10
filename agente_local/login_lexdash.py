@@ -43,15 +43,26 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         if log_fn:
             log_fn(msg)
 
+    _log(f"Diagnostico: _login_automatico recebeu usuario com {len(usuario) if usuario else 0} "
+         f"caractere(s) e senha com {len(senha) if senha else 0} caractere(s).")
+
+    # A tela de login existe em DOM duplicado (uma variante pra layout
+    # mobile, outra pra desktop — só uma fica visível por vez via CSS
+    # responsivo, mas as duas continuam montadas com o mesmo id/name).
+    # Pegar ".first" sem filtrar visibilidade cai na variante escondida:
+    # o preenchimento via JS funciona (não depende de visibilidade), mas
+    # quem é submetido de fato é a outra, que fica vazia. Por isso todo
+    # seletor abaixo usa ":visible" (extensão do próprio Playwright) pra
+    # sempre pegar a instância realmente exibida na tela.
     campos_usuario = [
-        "input[type='email']",
-        "input[name*='user' i]",
-        "input[name*='login' i]",
-        "input[placeholder*='usuário' i]",
-        "input[placeholder*='usuario' i]",
-        "input[placeholder*='email' i]",
-        "input[placeholder*='e-mail' i]",
-        "input[type='text']",
+        "input[type='email']:visible",
+        "input[name*='user' i]:visible",
+        "input[name*='login' i]:visible",
+        "input[placeholder*='usuário' i]:visible",
+        "input[placeholder*='usuario' i]:visible",
+        "input[placeholder*='email' i]:visible",
+        "input[placeholder*='e-mail' i]:visible",
+        "input[type='text']:visible",
     ]
     campo_usuario = None
     for sel in campos_usuario:
@@ -63,7 +74,11 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         _log("!! Login automático: campo de usuário não encontrado.")
         return False
 
-    campo_senha = pagina.locator("input[type='password']").first
+    campo_senha_todos = pagina.locator("input[type='password']")
+    campo_senha_visiveis = pagina.locator("input[type='password']:visible")
+    _log(f"Diagnostico: {campo_senha_todos.count()} campo(s) input[type='password'] na página "
+         f"({campo_senha_visiveis.count()} visível(is)).")
+    campo_senha = campo_senha_visiveis.first
     if campo_senha.count() == 0:
         _log("!! Login automático: campo de senha não encontrado.")
         return False
@@ -115,13 +130,13 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     clicou = False
     sel_usado = None
     for sel in [
-        "button[type='submit']",
-        "button:has-text('Entrar')",
-        "button:has-text('Login')",
-        "button:has-text('Acessar')",
-        "button:has-text('Continuar')",
-        "button:has-text('Fazer login')",
-        "input[type='submit']",
+        "button[type='submit']:visible",
+        "button:has-text('Entrar'):visible",
+        "button:has-text('Login'):visible",
+        "button:has-text('Acessar'):visible",
+        "button:has-text('Continuar'):visible",
+        "button:has-text('Fazer login'):visible",
+        "input[type='submit']:visible",
     ]:
         btn = pagina.locator(sel).first
         if btn.count() > 0:
@@ -176,10 +191,18 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     return True
 
 
-def fazer_login(headless: bool = False, log_fn=None) -> bool:
-    """Faz login (automático se LEXDASH_USER/LEXDASH_PASS existirem, senão
-    manual — só funciona manual se headless=False) e salva a sessão.
-    Retorna True em caso de sucesso."""
+def _fazer_login_com_p(p, headless: bool = False, log_fn=None) -> bool:
+    """Mesma lógica de fazer_login(), mas reaproveitando uma instância do
+    Playwright (`p`) já aberta por quem chamou, em vez de abrir a sua
+    própria com `with sync_playwright() as p:`.
+
+    Necessário porque o Playwright sync API não aceita duas instâncias
+    abertas na mesma thread ao mesmo tempo — chamar fazer_login() (que abre
+    a sua própria) de dentro de um trecho que já está dentro de um
+    `with sync_playwright() as p:` (caso do relogin automático durante um
+    preenchimento em andamento) estoura
+    "It looks like you are using Playwright Sync API inside the asyncio loop."
+    mesmo sem nenhum asyncio envolvido de verdade."""
     def _log(msg):
         try:
             print(msg)
@@ -190,38 +213,53 @@ def fazer_login(headless: bool = False, log_fn=None) -> bool:
 
     usuario = os.environ.get("LEXDASH_USER")
     senha = os.environ.get("LEXDASH_PASS")
+    _log(f"Diagnostico: LEXDASH_USER lido do .env tem {len(usuario) if usuario else 0} caractere(s); "
+         f"LEXDASH_PASS tem {len(senha) if senha else 0} caractere(s).")
 
-    with sync_playwright() as p:
-        navegador = p.webkit.launch(headless=headless)
-        # Em modo headless não existe janela real pra "viewport=None" seguir
-        # (usaria o tamanho da janela do sistema) — fixa um tamanho de
-        # desktop explícito pra não cair num layout mobile que esconde os
-        # campos do formulário.
-        contexto = navegador.new_context(viewport=None if not headless else {"width": 1440, "height": 900})
-        pagina = contexto.new_page()
-        pagina.goto(URL_LOGIN, timeout=30000, wait_until="domcontentloaded")
+    navegador = p.webkit.launch(headless=headless)
+    # Em modo headless não existe janela real pra "viewport=None" seguir
+    # (usaria o tamanho da janela do sistema) — fixa um tamanho de
+    # desktop explícito pra não cair num layout mobile que esconde os
+    # campos do formulário.
+    contexto = navegador.new_context(viewport=None if not headless else {"width": 1440, "height": 900})
+    pagina = contexto.new_page()
+    pagina.goto(URL_LOGIN, timeout=30000, wait_until="domcontentloaded")
 
-        ok = False
-        if usuario and senha:
-            _log("Tentando login automático no LexDash...")
-            ok = _login_automatico(pagina, usuario, senha, log_fn=log_fn)
-            if not ok and not headless:
-                _log("Login automático não funcionou — faça manualmente na janela.")
-                input("Depois de logar (e a página inicial carregar), pressione ENTER aqui... ")
-                ok = True
-        elif not headless:
-            _log("Faça login no LexDash na janela que abriu.")
+    ok = False
+    if usuario and senha:
+        _log("Tentando login automático no LexDash...")
+        ok = _login_automatico(pagina, usuario, senha, log_fn=log_fn)
+        if not ok and not headless:
+            _log("Login automático não funcionou — faça manualmente na janela.")
             input("Depois de logar (e a página inicial carregar), pressione ENTER aqui... ")
             ok = True
-        else:
-            _log("!! LEXDASH_USER/LEXDASH_PASS não configurados — não dá pra logar sem janela visível.")
+    elif not headless:
+        _log("Faça login no LexDash na janela que abriu.")
+        input("Depois de logar (e a página inicial carregar), pressione ENTER aqui... ")
+        ok = True
+    else:
+        _log("!! LEXDASH_USER/LEXDASH_PASS não configurados — não dá pra logar sem janela visível.")
 
-        if ok:
-            contexto.storage_state(path=ARQUIVO_SESSAO)
-            _log(f"Sessão salva em {ARQUIVO_SESSAO}")
+    if ok:
+        contexto.storage_state(path=ARQUIVO_SESSAO)
+        _log(f"Sessão salva em {ARQUIVO_SESSAO}")
 
-        navegador.close()
-        return ok
+    navegador.close()
+    return ok
+
+
+def fazer_login(headless: bool = False, log_fn=None) -> bool:
+    """Faz login (automático se LEXDASH_USER/LEXDASH_PASS existirem, senão
+    manual — só funciona manual se headless=False) e salva a sessão.
+    Retorna True em caso de sucesso.
+
+    Abre sua própria instância do Playwright — use isso quando chamar de
+    forma independente (linha de comando, ou quando ainda não existe
+    nenhum Playwright aberto na thread atual). Se já existe um `p` aberto
+    (ex.: relogin automático no meio de um preenchimento já em andamento),
+    chame _fazer_login_com_p(p, ...) direto em vez desta função."""
+    with sync_playwright() as p:
+        return _fazer_login_com_p(p, headless=headless, log_fn=log_fn)
 
 
 def principal():

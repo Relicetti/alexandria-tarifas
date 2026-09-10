@@ -564,24 +564,31 @@ def _abrir_sessao_valida(p, log_fn=None):
         pagina.wait_for_timeout(500)
 
         url_atual = pagina.url.lower()
-        if "login" in url_atual or "signin" in url_atual or "auth" in url_atual:
-            navegador.close()
-            if tentativa == 0 and os.environ.get("LEXDASH_USER") and os.environ.get("LEXDASH_PASS"):
-                _log("Sessao expirada — tentando logar de novo automaticamente...")
-                import login_lexdash as _login
-                if _login.fazer_login(headless=True, log_fn=log_fn):
-                    _log("Login automático OK, abrindo de novo...")
-                    continue
-                _log("Login automático falhou.")
-            raise RuntimeError(
-                "Sessao expirada. Rode login_lexdash.py de novo "
-                "(ou configure LEXDASH_USER/LEXDASH_PASS no .env para relogar sozinho)."
-            )
-        if "fatger" not in url_atual and "atualizacao" not in url_atual:
-            navegador.close()
-            raise RuntimeError(f"URL inesperada: {pagina.url}")
+        if "fatger" in url_atual or "atualizacao" in url_atual:
+            return navegador, pagina
 
-        return navegador, pagina
+        # Não chegou na tela esperada — a sessão provavelmente expirou.
+        # O LexDash nem sempre redireciona pra uma URL com "login"/"auth"
+        # nesse caso: às vezes cai na raiz do site ("https://.../") e só
+        # depois (via JS da SPA) manda pro login, ou nem manda. Por isso
+        # trata QUALQUER URL fora do esperado como sessão inválida, em vez
+        # de exigir "login"/"signin"/"auth" no meio do caminho.
+        navegador.close()
+        if tentativa == 0 and os.environ.get("LEXDASH_USER") and os.environ.get("LEXDASH_PASS"):
+            _log(f"Sessao expirada (URL inesperada: {pagina.url}) — tentando logar de novo automaticamente...")
+            import login_lexdash as _login
+            # Usa _fazer_login_com_p (reaproveitando o `p` já aberto por
+            # quem chamou _abrir_sessao_valida) em vez de fazer_login(),
+            # que abriria um segundo Playwright na mesma thread e
+            # estouraria "Playwright Sync API inside the asyncio loop".
+            if _login._fazer_login_com_p(p, headless=True, log_fn=log_fn):
+                _log("Login automático OK, abrindo de novo...")
+                continue
+            _log("Login automático falhou.")
+        raise RuntimeError(
+            f"Sessao expirada ou URL inesperada ({pagina.url}). Rode login_lexdash.py de novo "
+            "(ou configure LEXDASH_USER/LEXDASH_PASS no .env para relogar sozinho)."
+        )
 
     raise RuntimeError("Não foi possível abrir uma sessão válida do LexDash.")
 
