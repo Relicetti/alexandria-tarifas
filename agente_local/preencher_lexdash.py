@@ -314,6 +314,8 @@ def _escopo_modalidade(td, modalidade: str):
 # casos confirmados; para os desconhecidos, tenta as iniciais automaticamente.
 _APELIDOS_GRID = {
     "Energisa Sul Sudeste": "Energisa Sul-Sudeste",  # grid usa hífen, não espaço
+    "Equatorial CEEE": "CEEE Equatorial",  # grid inverte a ordem do nome
+    "Equatorial CEA": "CEA Equatorial",    # grid inverte a ordem do nome (mesmo padrão da CEEE)
 }
 
 
