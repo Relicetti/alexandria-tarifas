@@ -603,9 +603,10 @@ def api_tarifa_gerador():
     mes_db = mes[:7] + "-01"
 
     _usina_filter = (
-        "(f.usina_id IN ('101','102','9')"
+        "(f.usina_id IN ('101','102','103','9')"
         " OR f.usina_id LIKE '101;%' OR f.usina_id LIKE '%;101' OR f.usina_id LIKE '%;101;%'"
         " OR f.usina_id LIKE '102;%' OR f.usina_id LIKE '%;102' OR f.usina_id LIKE '%;102;%'"
+        " OR f.usina_id LIKE '103;%' OR f.usina_id LIKE '%;103' OR f.usina_id LIKE '%;103;%'"
         " OR f.usina_id LIKE '9;%'   OR f.usina_id LIKE '%;9'   OR f.usina_id LIKE '%;9;%')"
     )
     cond   = ["f.distribuidora = ?", "f.mes_referencia = ?", _usina_filter]
@@ -638,9 +639,10 @@ def api_tarifa_gerador():
 
         # Desconto GD: média das faturas reais da distribuidora
         _usina_filter_d = (
-            "(usina_id IN ('101','102','9')"
+            "(usina_id IN ('101','102','103','9')"
             " OR usina_id LIKE '101;%' OR usina_id LIKE '%;101' OR usina_id LIKE '%;101;%'"
             " OR usina_id LIKE '102;%' OR usina_id LIKE '%;102' OR usina_id LIKE '%;102;%'"
+            " OR usina_id LIKE '103;%' OR usina_id LIKE '%;103' OR usina_id LIKE '%;103;%'"
             " OR usina_id LIKE '9;%'   OR usina_id LIKE '%;9'   OR usina_id LIKE '%;9;%')"
         )
         cond_desc   = ["distribuidora = ?", "instalacao NOT LIKE 'HIST-%'", "desconto_base IS NOT NULL", _usina_filter_d]
