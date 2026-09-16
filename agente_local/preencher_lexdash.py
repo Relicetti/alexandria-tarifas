@@ -108,12 +108,29 @@ def _campo_mes(pagina):
     anterior de "input antes do botão Ir" pegava esse campo de busca por
     engano (o Ir fica mais perto dele na árvore do DOM do que do campo do
     mês). Retorna (campo, botao_ir).
+
+    IMPORTANTE: a página tem 2 botões 'Ir' — outro card (ex.: "Atualizacao
+    de Unidade Consumidora" ou "Teste de Calculo de Faturas") também tem um
+    campo de mês + Ir no DOM, mesmo escondido/colapsado. Pegar o Ir com
+    `.first` direto na página inteira pega o botão errado (confirmado em
+    produção: o clique nunca disparava a requisição da grid, mesmo
+    retentando várias vezes). Por isso o botão é localizado a partir do
+    campo (primeiro 'Ir' que aparece DEPOIS dele no DOM), não da página toda.
     """
-    btn = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
+    btn_pagina_toda = pagina.locator("button:has-text('Ir'), input[value='Ir']").first
+
+    def _btn_apos(loc):
+        btn = loc.locator("xpath=following::button[normalize-space(text())='Ir'][1]")
+        if btn.count() > 0:
+            return btn
+        btn = loc.locator("xpath=following::input[@value='Ir'][1]")
+        if btn.count() > 0:
+            return btn
+        return btn_pagina_toda
 
     campo = pagina.locator("input[placeholder='MM-AAAA']").first
     if campo.count() > 0:
-        return campo, btn
+        return campo, _btn_apos(campo)
 
     candidatos = [
         "input[placeholder*='mês'], input[placeholder*='mes']",
@@ -123,9 +140,9 @@ def _campo_mes(pagina):
     for sel in candidatos:
         loc = pagina.locator(sel).first
         if loc.count() > 0:
-            return loc, btn
+            return loc, _btn_apos(loc)
 
-    return pagina.locator("input").first, btn
+    return pagina.locator("input").first, btn_pagina_toda
 
 
 def _dump_inputs_debug(pagina, log_fn=None):
