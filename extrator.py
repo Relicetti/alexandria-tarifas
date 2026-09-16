@@ -74,6 +74,13 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
   "celesc_valor_0t": número (soma Valor R$ de TODAS as linhas 0T) ou null — SÓ para CELESC GD2 Autoconsumo,
   "celesc_valor_13": número (soma Valor R$ de todas as linhas 13, negativo) ou null — SÓ para CELESC GD2 Autoconsumo,
 
+  "enel_te_consumida_faturada": número (Preço unit. da linha "Energia Consumida Faturada TE") ou null — SÓ Enel GD1 c/ múltiplos meses de compensação,
+  "enel_tusd_consumida_faturada": número (Preço unit. da linha "Energia Consumida Faturada TUSD") ou null — idem,
+  "enel_te_fornecida": número (Preço unit. da linha "Energia Ativa Fornecida TE") ou null — idem,
+  "enel_tusd_fornecida": número (Preço unit. da linha "Energia Ativa Fornecida TUSD") ou null — idem,
+  "enel_te_inj_media_ponderada": número (média ponderada por kWh, com sinal negativo, das linhas "Energia Atv Inj TE oUC .../...") ou null — idem,
+  "enel_tusd_inj_media_ponderada": número (idem para as linhas "Energia Atv Inj TUSD oUC .../...") ou null — idem,
+
   "grupo": "um de: GER | EQT | NEOENERGIA | ENERGISA | LIGHT | CEMIG | BRASILIA"
 }
 
@@ -178,6 +185,40 @@ Instruções:
 
 - Para faturas CELESC G1 (geração local, sem injeção remota): usar o padrão GER normal
   (te_consumo + tusd_consumo separados, te_compensada + tusd_compensada, grupo = "GER")
+
+- Para faturas Enel (CE/GO/RJ/SP) GD1 Geração Compartilhada com MAIS DE UMA linha
+  "Energia Atv Inj TE/TUSD oUC MM/YYYY ... GD1" (créditos de compensação vindos de
+  meses de competência diferentes, cada um com sua própria tarifa):
+  Preencha os campos brutos abaixo (além dos te_/tusd_ finais, que serão recalculados):
+  * enel_te_consumida_faturada   = Preço unit. da linha "Energia Consumida Faturada TE"
+  * enel_tusd_consumida_faturada = Preço unit. da linha "Energia Consumida Faturada TUSD"
+  * enel_te_fornecida    = Preço unit. da linha "Energia Ativa Fornecida TE"
+  * enel_tusd_fornecida  = Preço unit. da linha "Energia Ativa Fornecida TUSD"
+  * enel_te_inj_media_ponderada   = Σ(kWh_linha × preço_unit_linha) / Σ(kWh_linha), somando TODAS
+    as linhas "Energia Atv Inj TE oUC .../..." — mantenha o preço unitário COM O SINAL NEGATIVO
+    exatamente como aparece na fatura (ex: "0,34946-" → -0,34946)
+  * enel_tusd_inj_media_ponderada = idem, para as linhas "Energia Atv Inj TUSD oUC .../..."
+
+  FÓRMULA FINAL (recalculada em Python, não confie na sua própria conta):
+    te_compensada   = enel_te_consumida_faturada   − enel_te_fornecida   − enel_te_inj_media_ponderada
+    tusd_compensada = enel_tusd_consumida_faturada − enel_tusd_fornecida − enel_tusd_inj_media_ponderada
+
+  Exemplo (Enel CE GD1 Geração Compartilhada, 08/2026):
+      Energia Consumida Faturada TE = 0,34733  |  Energia Ativa Fornecida TE = 0,34804
+      Energia Atv Inj TE oUC 06/2026: 10 kWh × -0,35300
+      Energia Atv Inj TE oUC 07/2026: 168 kWh × -0,34946
+      enel_te_inj_media_ponderada = (10×-0,35300 + 168×-0,34946) / 178 = -0,349659
+      te_compensada = 0,34733 − 0,34804 − (−0,349659) = 0,348949
+
+      Energia Consumida Faturada TUSD = 0,65200  |  Energia Ativa Fornecida TUSD = 0,65168
+      Energia Atv Inj TUSD oUC 06/2026: 10 kWh × -0,53100
+      Energia Atv Inj TUSD oUC 07/2026: 168 kWh × -0,52375
+      enel_tusd_inj_media_ponderada = (10×-0,53100 + 168×-0,52375) / 178 = -0,524157
+      tusd_compensada = 0,65200 − 0,65168 − (−0,524157) = 0,524477
+
+  Se houver SÓ UMA linha "Energia Atv Inj TE/TUSD" (sem múltiplos meses de competência),
+  NÃO preencha estes campos enel_* — use o padrão GER normal
+  (te_compensada/tusd_compensada = preço unitário dessa linha única).
 
 - Para faturas com MÚLTIPLAS FAIXAS DE ICMS no consumo (ex: CELESC G1, CEEE — faixa 12% e faixa 17%):
   As linhas de "Consumo TE" e "Consumo TUSD" aparecem REPETIDAS com kWh e tarifas diferentes.
@@ -406,6 +447,35 @@ def _processar_celesc_gd2(dados: dict) -> dict:
     return dados
 
 
+def _processar_enel_multi_mes(dados: dict) -> dict:
+    """
+    Recalcula te_compensada/tusd_compensada de forma DETERMINÍSTICA (em Python,
+    não confiando na matemática da IA) para faturas Enel GD1 Geração
+    Compartilhada com créditos de compensação vindos de MÚLTIPLOS meses de
+    competência (linhas "Energia Atv Inj TE/TUSD oUC MM/YYYY"), cada um com
+    sua própria tarifa.
+
+    Fórmula: compensada = consumida_faturada − fornecida − média_ponderada(inj)
+    onde média_ponderada(inj) usa os preços unitários das linhas de injeção
+    COM SINAL NEGATIVO (como aparecem na fatura), ponderados pelo kWh de cada linha.
+    """
+    te_cf   = dados.get("enel_te_consumida_faturada")
+    te_forn = dados.get("enel_te_fornecida")
+    te_inj  = dados.get("enel_te_inj_media_ponderada")
+    if te_cf is None or te_forn is None or te_inj is None:
+        return dados  # não é o padrão Enel multi-mês — não mexe
+
+    dados["te_compensada"] = round(float(te_cf) - float(te_forn) - float(te_inj), 6)
+
+    tusd_cf   = dados.get("enel_tusd_consumida_faturada")
+    tusd_forn = dados.get("enel_tusd_fornecida")
+    tusd_inj  = dados.get("enel_tusd_inj_media_ponderada")
+    if tusd_cf is not None and tusd_forn is not None and tusd_inj is not None:
+        dados["tusd_compensada"] = round(float(tusd_cf) - float(tusd_forn) - float(tusd_inj), 6)
+
+    return dados
+
+
 def extrair_fatura(pdf_bytes: bytes) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -443,5 +513,6 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
 
     dados = json.loads(text)
     dados = _processar_celesc_gd2(dados)
+    dados = _processar_enel_multi_mes(dados)
     dados = _processar_bandeiras(dados)
     return dados

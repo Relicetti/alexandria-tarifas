@@ -238,6 +238,76 @@
     <!-- ── Coluna direita ──────────────────────────────────── -->
     <div class="col-md-6">
 
+      <!-- Painel Aux: calculadora manual de Tarifa Compensada (aparece p/ todas as concessionárias) -->
+      <div class="card mb-3">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          🧮 Painel Aux — Cálculo de Tarifa Compensada
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0"
+            data-bs-toggle="collapse" data-bs-target="#painel_aux_comp"
+            style="font-size:0.75rem">abrir/fechar</button>
+        </div>
+        <div class="collapse" id="painel_aux_comp">
+          <div class="card-body">
+            <div class="text-muted mb-2" style="font-size:0.75rem">
+              Não preenche nada sozinho — preencha os valores da fatura e clique em "Calcular e preencher".<br>
+              Fórmula: Compensada = Consumida Faturada − Fornecida − média ponderada (por kWh) das linhas de energia injetada.
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label small mb-0">TE Consumida Faturada</label>
+                <input type="number" step="any" id="aux_te_cf" class="form-control form-control-sm" placeholder="ex: 0.34733">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-0">TUSD Consumida Faturada</label>
+                <input type="number" step="any" id="aux_tusd_cf" class="form-control form-control-sm" placeholder="ex: 0.65200">
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label small mb-0">TE Fornecida</label>
+                <input type="number" step="any" id="aux_te_forn" class="form-control form-control-sm" placeholder="ex: 0.34804">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-0">TUSD Fornecida</label>
+                <input type="number" step="any" id="aux_tusd_forn" class="form-control form-control-sm" placeholder="ex: 0.65168">
+              </div>
+            </div>
+            <div class="text-muted mb-1" style="font-size:0.75rem">Linhas de energia injetada (uma por mês de competência — preencha o kWh e a tarifa como aparece na fatura, com o sinal negativo se houver):</div>
+            <table class="table table-sm mb-2" style="font-size:0.8rem">
+              <thead class="table-light">
+                <tr>
+                  <th>Mês</th>
+                  <th class="text-end">kWh Inj.</th>
+                  <th class="text-end">Preço TE</th>
+                  <th class="text-end">Preço TUSD</th>
+                </tr>
+              </thead>
+              <tbody id="aux_comp_rows">
+                <tr>
+                  <td><input type="text" class="form-control form-control-sm" placeholder="ex: 06/2026"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-kwh" placeholder="kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-te-inj" placeholder="R$/kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-tusd-inj" placeholder="R$/kWh"></td>
+                </tr>
+                <tr>
+                  <td><input type="text" class="form-control form-control-sm" placeholder="ex: 07/2026"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-kwh" placeholder="kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-te-inj" placeholder="R$/kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-tusd-inj" placeholder="R$/kWh"></td>
+                </tr>
+                <tr>
+                  <td><input type="text" class="form-control form-control-sm" placeholder=""></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-kwh" placeholder="kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-te-inj" placeholder="R$/kWh"></td>
+                  <td><input type="number" step="any" class="form-control form-control-sm aux-tusd-inj" placeholder="R$/kWh"></td>
+                </tr>
+              </tbody>
+            </table>
+            <button type="button" class="btn btn-primary btn-sm" onclick="calcPainelAux()">Calcular e preencher →</button>
+          </div>
+        </div>
+      </div>
+
       <!-- GER: TE + TUSD separados -->
       <div class="card mb-3 grupo-campo" id="bloco_te_tusd" style="display:none">
         <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
@@ -857,6 +927,36 @@ function calcPonderado() {
     document.getElementById('tusd_compensada').value = tusd_i.toFixed(6);
     document.querySelector('[name=injetada_kwh]').value = kwh_i.toFixed(2);
   }
+  calcPreview();
+}
+
+// ── Painel Aux: calculadora manual de Tarifa Compensada (todas as concessionárias) ──
+function calcPainelAux() {
+  function mediaPonderada(seletorPreco) {
+    let sumKwh = 0, sumVal = 0;
+    const ks = document.querySelectorAll('.aux-kwh');
+    const ps = document.querySelectorAll(seletorPreco);
+    ks.forEach((k, i) => {
+      const kwh   = parseFloat(k.value) || 0;
+      const preco = parseFloat(ps[i]?.value) || 0;
+      sumKwh += kwh; sumVal += kwh * preco;
+    });
+    return sumKwh > 0 ? sumVal / sumKwh : 0;
+  }
+
+  const teCF     = parseFloat(document.getElementById('aux_te_cf')?.value)     || 0;
+  const tusdCF   = parseFloat(document.getElementById('aux_tusd_cf')?.value)   || 0;
+  const teForn   = parseFloat(document.getElementById('aux_te_forn')?.value)   || 0;
+  const tusdForn = parseFloat(document.getElementById('aux_tusd_forn')?.value) || 0;
+
+  const mediaTE   = mediaPonderada('.aux-te-inj');
+  const mediaTUSD = mediaPonderada('.aux-tusd-inj');
+
+  const teComp   = teCF   - teForn   - mediaTE;
+  const tusdComp = tusdCF - tusdForn - mediaTUSD;
+
+  document.querySelectorAll('[name="te_compensada"]').forEach(el   => el.value = teComp.toFixed(6));
+  document.querySelectorAll('[name="tusd_compensada"]').forEach(el => el.value = tusdComp.toFixed(6));
   calcPreview();
 }
 
