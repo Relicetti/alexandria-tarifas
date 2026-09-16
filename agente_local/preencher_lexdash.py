@@ -208,25 +208,56 @@ def _selecionar_mes(pagina, mes_lex: str, log_fn=None):
 
     # clica no MESMO botão Ir associado ao campo que acabou de ser preenchido
     # (não busca de novo — evita clicar num "Ir" de outra seção da página)
-    if btn_ir.count() > 0:
-        btn_ir.click(timeout=5000, force=True)
-        pagina.wait_for_timeout(3000)
+    alvo = btn_ir if btn_ir.count() > 0 else None
+    if alvo is None:
+        for sel in ["button:has-text('Ir')", "input[value='Ir']", "text=Ir"]:
+            btn = pagina.locator(sel).first
+            if btn.count() > 0:
+                alvo = btn
+                break
+    if alvo is None:
+        raise RuntimeError("Botão 'Ir' não encontrado na tela.")
+
+    # Confirmado ao vivo no LexDash (16/09/2026): a troca de mês não mostra
+    # nenhum indicador visual tipo "Carregando" — o clique em "Ir" dispara um
+    # POST para /api/data/tarifas-variaveis que recarrega o grid. Às vezes
+    # esse clique simplesmente não dispara request nenhuma (bug intermitente
+    # do próprio LexDash, reproduzido manualmente: primeiro clique não fez
+    # nada, segundo clique no mesmo botão funcionou), e sem essa checagem o
+    # código seguia em frente preenchendo o grid do mês anterior sem avisar.
+    for tentativa in range(3):
         try:
-            valor_pos_ir = campo.input_value(timeout=2000)
-            _log(f"Campo do mês depois do clique em Ir: '{valor_pos_ir}'.")
-        except Exception:
-            pass
-        return
+            with pagina.expect_response(
+                lambda r: "tarifas-variaveis" in r.url and r.request.method == "POST",
+                timeout=6000,
+            ):
+                alvo.click(timeout=5000, force=True)
+            break
+        except PWTimeout:
+            _log(f"!! Cliquei em 'Ir' mas não vi a requisição que recarrega o "
+                 f"grid (tentativa {tentativa + 1}/3) — mês pode ter ficado no "
+                 f"valor anterior. Tentando de novo.")
+            pagina.wait_for_timeout(800)
+    else:
+        raise RuntimeError(
+            f"Cliquei em 'Ir' várias vezes mas o grid não parece ter recarregado "
+            f"para o mês '{mes_lex}' — abortando para não preencher no mês errado."
+        )
 
-    # fallback: procura qualquer botão "Ir" na página
-    for sel in ["button:has-text('Ir')", "input[value='Ir']", "text=Ir"]:
-        btn = pagina.locator(sel).first
-        if btn.count() > 0:
-            btn.click(timeout=5000, force=True)
-            pagina.wait_for_timeout(3000)
-            return
+    pagina.wait_for_timeout(1500)
 
-    raise RuntimeError(f"Botão 'Ir' não encontrado na tela.")
+    try:
+        valor_pos_ir = campo.input_value(timeout=2000)
+        _log(f"Campo do mês depois do clique em Ir: '{valor_pos_ir}'.")
+        if valor_pos_ir != mes_lex:
+            raise RuntimeError(
+                f"Depois de clicar em 'Ir' o campo do mês mostra '{valor_pos_ir}', "
+                f"não '{mes_lex}' — abortando para não preencher no mês errado."
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
 
 
 def _aguardar_grid(pagina):
