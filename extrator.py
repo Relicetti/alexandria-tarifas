@@ -311,22 +311,36 @@ Instruções:
   * NUNCA deixe b_X_cons_valor = 0 se houver qualquer cobrança de bandeira na fatura
 """
 
-# ── Override de aprendizado ────────────────────────────────────────────────
-# melhorar_prompt.py grava aqui o PROMPT reescrito com base nas correções do
-# usuário. Fica no volume persistente (/data), então sobrevive a redeploys —
-# diferente de sobrescrever este arquivo .py, que é apagado a cada deploy.
+# ── Aprendizados das correções ─────────────────────────────────────────────
+# melhorar_prompt.py grava aqui uma lista curta de regras aprendidas com as
+# correções do usuário, que é ANEXADA ao _PROMPT_BASE (nunca o substitui).
+# Assim o base continua vindo do código — melhorias feitas aqui chegam à
+# produção — e uma resposta ruim da IA não tem como apagar o prompt inteiro.
+# Fica no volume persistente (/data), então sobrevive a redeploys.
+# (O antigo prompt_extrator_aprendido.txt, que substituía o base inteiro e
+# saía truncado, é ignorado.)
 _DATA_DIR = Path(os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "tarifas.db"))).parent
-PROMPT_OVERRIDE_FILE = _DATA_DIR / "prompt_extrator_aprendido.txt"
+APRENDIZADOS_FILE = _DATA_DIR / "prompt_extrator_aprendizados.txt"
+
+_CABECALHO_APRENDIZADOS = (
+    "\n\n══════════════════════════════════════════════════════════════════\n"
+    "REGRAS APRENDIDAS COM CORREÇÕES DO USUÁRIO (prevalecem sobre as regras acima em caso de conflito):\n"
+)
+
+
+def _carregar_aprendizados() -> str:
+    try:
+        if APRENDIZADOS_FILE.exists():
+            return APRENDIZADOS_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _carregar_prompt() -> str:
-    try:
-        if PROMPT_OVERRIDE_FILE.exists():
-            texto = PROMPT_OVERRIDE_FILE.read_text(encoding="utf-8").strip()
-            if texto:
-                return texto
-    except Exception:
-        pass
+    aprendizados = _carregar_aprendizados()
+    if aprendizados:
+        return _PROMPT_BASE + _CABECALHO_APRENDIZADOS + aprendizados
     return _PROMPT_BASE
 
 
