@@ -115,7 +115,8 @@ def _registrar_feedback(extraido_orig: dict, dados_salvos: dict):
                 from melhorar_prompt import melhorar
                 melhorar()
             except Exception as e:
-                print(f"[feedback] Erro ao melhorar prompt: {e}")
+                import traceback
+                _log_debug(f"ERRO melhorar prompt: {e}\n{traceback.format_exc()}")
         threading.Thread(target=_melhorar, daemon=True).start()
     else:
         print("[feedback] Extração sem divergências — nenhuma correção necessária.")

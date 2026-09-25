@@ -1,16 +1,23 @@
 """
-Melhora automaticamente o PROMPT de extração com base no feedback de correções.
+Aprende com o feedback de correções e mantém uma lista de REGRAS APRENDIDAS
+que é anexada ao PROMPT base de extração (ver extrator._carregar_prompt).
 Chamado em background após cada fatura salva com divergências.
 
-O prompt aprendido é gravado em PROMPT_OVERRIDE_FILE, no volume persistente
-(/data) — não no .py — para sobreviver a redeploys (o filesystem do container
-é recriado do zero a cada deploy a partir do Git; o volume não).
+A IA não reescreve mais o PROMPT inteiro: ele tem ~20 mil caracteres e a
+resposta saía truncada, apagando metade das instruções. Agora ela só devolve
+a lista de regras atualizada, que é curta e é validada antes de ser gravada.
+
+As regras ficam em APRENDIZADOS_FILE, no volume persistente (/data) — não no
+.py — para sobreviver a redeploys.
 """
 
 import json
 import os
 import re
+import threading
+import traceback
 import anthropic
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -18,39 +25,53 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 import db as _db
 import extrator as _extrator
-_DATA_DIR          = Path(_db.DB_PATH).parent
-FEEDBACK_FILE      = _DATA_DIR / "feedback_extracao.jsonl"
-PROMPT_OVERRIDE_FILE = _extrator.PROMPT_OVERRIDE_FILE
+_DATA_DIR         = Path(_db.DB_PATH).parent
+FEEDBACK_FILE     = _DATA_DIR / "feedback_extracao.jsonl"
+DEBUG_LOG         = _DATA_DIR / "debug_feedback.log"
+APRENDIZADOS_FILE = _extrator.APRENDIZADOS_FILE
+
+# Acima disso a lista virou um segundo prompt — sinal de resposta degenerada.
+_MAX_CHARS_APRENDIZADOS = 12000
+
+# Várias faturas salvas em sequência disparam várias threads; sem o lock uma
+# sobrescreveria o resultado da outra.
+_lock = threading.Lock()
 
 PROMPT_MELHORIA = """Você é um engenheiro de prompts especialista em extração de dados de faturas de energia elétrica brasileiras.
 
-O sistema usa o PROMPT abaixo para extrair dados de PDFs via IA.
-Houve {n} caso(s) recentes onde a extração retornou valores incorretos — o usuário precisou corrigir os dados manualmente.
+O sistema usa o PROMPT BASE abaixo para extrair dados de PDFs via IA. Ao final dele é anexada uma lista de REGRAS APRENDIDAS com correções feitas pelo usuário.
 
-PROMPT ATUAL:
+PROMPT BASE (somente para contexto — NÃO reescreva):
 \"\"\"
-{prompt_atual}
+{prompt_base}
 \"\"\"
 
-CASOS COM ERROS (extraído → corrigido pelo usuário):
+REGRAS APRENDIDAS ATUAIS:
+\"\"\"
+{aprendizados}
+\"\"\"
+
+Houve {n} caso(s) recentes em que a extração retornou valores incorretos e o usuário corrigiu manualmente (extraído → corrigido; "None" significa campo vazio):
 {casos}
 
-Analise os erros e reescreva o PROMPT com melhorias PRECISAS E MÍNIMAS para que esses tipos de erros não ocorram novamente.
-- Não altere partes do PROMPT que já funcionam bem
-- Adicione ou ajuste apenas as instruções necessárias para cobrir os casos de erro acima
-- Mantenha exatamente o mesmo formato JSON de saída e a mesma estrutura geral do PROMPT
-- Se o erro foi num campo específico de uma distribuidora específica, adicione instrução clara para aquele caso
-- Retorne APENAS o texto do novo PROMPT (sem markdown, sem explicações adicionais, sem ```)
+Atualize a lista de REGRAS APRENDIDAS para que esses erros não se repitam:
+- Mantenha as regras atuais que continuam válidas; ajuste ou funda as que se sobrepõem; remova as que contradizem correções mais recentes
+- Cada regra deve ser específica e acionável: diga a distribuidora/grupo, o campo, onde o valor aparece na fatura e o que fazer (ex: sinal, linha certa, unidade)
+- Não repita o que o PROMPT BASE já diz, a menos que a regra precise ser reforçada por causa de um erro recorrente
+- Se uma correção parecer um ajuste pontual do usuário e não um erro de leitura da fatura, não crie regra para ela
+- Não altere o formato JSON de saída nem os nomes dos campos
+- No máximo 40 regras, uma por linha, cada linha começando com "- "
+- Retorne APENAS a lista de regras (sem título, sem markdown, sem explicações, sem ```)
 """
 
 
-def _extrair_prompt_atual() -> str:
-    return _extrator._carregar_prompt()
-
-
-def _atualizar_prompt(novo_prompt: str):
-    PROMPT_OVERRIDE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PROMPT_OVERRIDE_FILE.write_text(novo_prompt.strip(), encoding="utf-8")
+def _log(msg: str):
+    print(f"[melhorar_prompt] {msg}")
+    try:
+        with open(DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%H:%M:%S')}] [melhorar_prompt] {msg}\n")
+    except Exception:
+        pass
 
 
 def _carregar_feedback_recente(max_casos: int = 15) -> list:
@@ -71,17 +92,7 @@ def _carregar_feedback_recente(max_casos: int = 15) -> list:
     return casos[-max_casos:]
 
 
-def melhorar():
-    casos = _carregar_feedback_recente()
-    if not casos:
-        return
-
-    prompt_atual = _extrair_prompt_atual()
-    if not prompt_atual:
-        print("[melhorar_prompt] PROMPT base não encontrado")
-        return
-
-    # Formata os casos de erro de forma legível
+def _formatar_casos(casos: list) -> str:
     linhas = []
     for i, caso in enumerate(casos, 1):
         linhas.append(
@@ -92,12 +103,40 @@ def melhorar():
             linhas.append(
                 f"  {campo}: extraído={vals['extraido']}  →  correto={vals['corrigido']}"
             )
-    casos_txt = "\n".join(linhas)
+    return "\n".join(linhas)
+
+
+def _validar(texto: str) -> str | None:
+    """Devolve o motivo de rejeição, ou None se a lista está boa pra gravar."""
+    if not texto:
+        return "resposta vazia"
+    if len(texto) > _MAX_CHARS_APRENDIZADOS:
+        return f"resposta grande demais ({len(texto)} chars)"
+    regras = [l for l in texto.splitlines() if l.strip().startswith("-")]
+    if not regras:
+        return "resposta sem nenhuma regra no formato '- ...'"
+    return None
+
+
+def melhorar():
+    with _lock:
+        try:
+            _melhorar()
+        except Exception as e:
+            _log(f"ERRO: {e}\n{traceback.format_exc()}")
+
+
+def _melhorar():
+    casos = _carregar_feedback_recente()
+    if not casos:
+        return
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("[melhorar_prompt] ANTHROPIC_API_KEY não configurada")
+        _log("ANTHROPIC_API_KEY não configurada")
         return
+
+    aprendizados = _extrator._carregar_aprendizados()
 
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
@@ -106,20 +145,34 @@ def melhorar():
         messages=[{
             "role": "user",
             "content": PROMPT_MELHORIA.format(
+                prompt_base=_extrator._PROMPT_BASE,
+                aprendizados=aprendizados or "(nenhuma ainda)",
                 n=len(casos),
-                prompt_atual=prompt_atual,
-                casos=casos_txt,
+                casos=_formatar_casos(casos),
             ),
         }],
     )
 
-    novo_prompt = msg.content[0].text.strip()
-    # Remove markdown fences se o modelo as incluiu mesmo assim
-    novo_prompt = re.sub(r"^```[^\n]*\n?", "", novo_prompt)
-    novo_prompt = re.sub(r"\n?```$", "", novo_prompt)
+    # Resposta cortada por limite de tokens é justamente o bug que apagava o
+    # prompt — nunca grava nada que não terminou normalmente.
+    if msg.stop_reason != "end_turn":
+        _log(f"resposta descartada: stop_reason={msg.stop_reason}")
+        return
 
-    _atualizar_prompt(novo_prompt)
-    print(
-        f"[melhorar_prompt] ✅ PROMPT atualizado com base em {len(casos)} "
-        f"caso(s) de correção."
-    )
+    novo = msg.content[0].text.strip()
+    # Remove markdown fences se o modelo as incluiu mesmo assim
+    novo = re.sub(r"^```[^\n]*\n?", "", novo)
+    novo = re.sub(r"\n?```$", "", novo).strip()
+
+    motivo = _validar(novo)
+    if motivo:
+        _log(f"resposta descartada: {motivo}")
+        return
+
+    APRENDIZADOS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = APRENDIZADOS_FILE.with_suffix(".tmp")
+    tmp.write_text(novo + "\n", encoding="utf-8")
+    tmp.replace(APRENDIZADOS_FILE)   # troca atômica: extração nunca lê arquivo pela metade
+
+    n_regras = sum(1 for l in novo.splitlines() if l.strip().startswith("-"))
+    _log(f"✅ {n_regras} regra(s) aprendida(s) gravadas com base em {len(casos)} caso(s) de correção.")
