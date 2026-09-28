@@ -380,6 +380,58 @@ def _nomes_candidatos(distribuidora: str) -> list:
     return candidatos
 
 
+def _setar_celula(pagina, escopo, valor_str: str, rotulo: str, warn) -> bool:
+    """Marca o checkbox e escreve valor_str no input de uma célula do grid
+    (escopo = td, ou o sub-bloco GC/Autoconsumo dela). Retorna True se
+    escreveu o valor."""
+    TO = 5000
+
+    # Marca checkbox via native checked setter (igual ao que funciona no input)
+    try:
+        cb = escopo.locator("input[type='checkbox']").first
+        if cb.count() > 0:
+            cb_el = cb.element_handle(timeout=TO)
+            if cb_el:
+                pagina.evaluate("""
+                    el => {
+                        const setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'checked'
+                        ).set;
+                        setter.call(el, true);
+                        el.dispatchEvent(new Event('input',  {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new Event('click',  {bubbles: true}));
+                    }
+                """, cb_el)
+                pagina.wait_for_timeout(800)
+    except Exception as e:
+        warn(f"Erro ao marcar checkbox {rotulo}: {e}")
+
+    # Preenche o input via JavaScript (necessário para apps React)
+    try:
+        inp = escopo.locator("input[inputmode='decimal'], input:not([type='checkbox'])").first
+        if inp.count() > 0:
+            inp_el = inp.element_handle(timeout=TO)
+            if inp_el:
+                pagina.evaluate("""
+                    ([el, val]) => {
+                        el.focus();
+                        el.click();
+                        const setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value'
+                        ).set;
+                        setter.call(el, val);
+                        el.dispatchEvent(new Event('input',  {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new Event('blur',   {bubbles: true}));
+                    }
+                """, [inp_el, valor_str])
+                return True
+    except Exception as e:
+        warn(f"Erro ao preencher {rotulo}: {e}")
+    return False
+
+
 def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, modalidade: str = "", log_fn=None):
     """
     Encontra a linha da distribuidora no grid, marca os checkboxes e preenche o valor
@@ -478,49 +530,8 @@ def _preencher_linha(pagina, distribuidora: str, usinas: list, valor: float, mod
         td = tds[col_idx]
         escopo = _escopo_modalidade(td, modalidade)
 
-        # Marca checkbox via native checked setter (igual ao que funciona no input)
-        try:
-            cb = escopo.locator("input[type='checkbox']").first
-            if cb.count() > 0:
-                cb_el = cb.element_handle(timeout=TO)
-                if cb_el:
-                    pagina.evaluate("""
-                        el => {
-                            const setter = Object.getOwnPropertyDescriptor(
-                                window.HTMLInputElement.prototype, 'checked'
-                            ).set;
-                            setter.call(el, true);
-                            el.dispatchEvent(new Event('input',  {bubbles: true}));
-                            el.dispatchEvent(new Event('change', {bubbles: true}));
-                            el.dispatchEvent(new Event('click',  {bubbles: true}));
-                        }
-                    """, cb_el)
-                    pagina.wait_for_timeout(800)
-        except Exception as e:
-            _warn(f"Erro ao marcar checkbox usina {usina_id}: {e}")
-
-        # Preenche o input via JavaScript (necessário para apps React)
-        try:
-            inp = escopo.locator("input[inputmode='decimal'], input:not([type='checkbox'])").first
-            if inp.count() > 0:
-                inp_el = inp.element_handle(timeout=TO)
-                if inp_el:
-                    pagina.evaluate("""
-                        ([el, val]) => {
-                            el.focus();
-                            el.click();
-                            const setter = Object.getOwnPropertyDescriptor(
-                                window.HTMLInputElement.prototype, 'value'
-                            ).set;
-                            setter.call(el, val);
-                            el.dispatchEvent(new Event('input',  {bubbles: true}));
-                            el.dispatchEvent(new Event('change', {bubbles: true}));
-                            el.dispatchEvent(new Event('blur',   {bubbles: true}));
-                        }
-                    """, [inp_el, valor_str])
-                    preencheu = True
-        except Exception as e:
-            _warn(f"Erro ao preencher usina {usina_id}: {e}")
+        if _setar_celula(pagina, escopo, valor_str, f"usina {usina_id}", _warn):
+            preencheu = True
 
     if preencheu:
         # Rola a linha preenchida pro centro da tela — usa a MESMA linha já
@@ -573,6 +584,27 @@ def _salvar(pagina, log_fn=None):
     _warn("!! Botao Salvar nao encontrado — verifique os nomes acima.")
 
 
+def _aguardar_salvar(pagina) -> bool:
+    """Espera (até 5 min) o usuário clicar Salvar no browser, detectando a
+    requisição de gravação na rede. Retorna True se o Salvar aconteceu."""
+    salvo = {"ok": False}
+
+    def _on_response(resp):
+        if resp.status < 400 and resp.request.method in ("POST", "PUT", "PATCH"):
+            if any(k in resp.url for k in ("tarifa", "salvar", "save", "update", "fat")):
+                salvo["ok"] = True
+
+    pagina.on("response", _on_response)
+
+    for _ in range(150):
+        pagina.wait_for_timeout(2000)
+        if salvo["ok"]:
+            break
+
+    pagina.remove_listener("response", _on_response)
+    return salvo["ok"]
+
+
 def _tipo_passagem(item: dict) -> str:
     """Determina o tipo de passagem: 'GD1', 'GD2', ou 'CacauShow'."""
     modal = (item.get("modalidade") or "").lower()
@@ -583,7 +615,7 @@ def _tipo_passagem(item: dict) -> str:
     return "GD1"
 
 
-def _abrir_sessao_valida(p, log_fn=None):
+def _abrir_sessao_valida(p, log_fn=None, headless=False):
     """Abre o navegador com a sessão salva, navega até a tela de atualização
     de tarifas e confere se a sessão ainda é válida. Se estiver expirada e
     LEXDASH_USER/LEXDASH_PASS estiverem configurados, tenta logar de novo
@@ -598,7 +630,7 @@ def _abrir_sessao_valida(p, log_fn=None):
             log_fn(msg)
 
     for tentativa in range(2):
-        navegador = p.webkit.launch(headless=False)
+        navegador = p.webkit.launch(headless=headless)
         contexto = navegador.new_context(storage_state=ARQUIVO_SESSAO, viewport=None)
         pagina = contexto.new_page()
 
@@ -724,24 +756,7 @@ def preencher(itens: list[dict], dry_run=False, debug=False, log_fn=None):
                     # Detecta Salvar via rede: aguarda o usuário clicar
                     _log(f"Marque o checkbox e clique Salvar no browser.")
 
-                    salvo = {"ok": False}
-
-                    def _on_response(resp):
-                        if resp.status < 400 and resp.request.method in ("POST", "PUT", "PATCH"):
-                            if any(k in resp.url for k in ("tarifa", "salvar", "save", "update", "fat")):
-                                salvo["ok"] = True
-
-                    pagina.on("response", _on_response)
-
-                    # Aguarda até 5 minutos pelo Salvar
-                    for _ in range(150):
-                        pagina.wait_for_timeout(2000)
-                        if salvo["ok"]:
-                            break
-
-                    pagina.remove_listener("response", _on_response)
-
-                    if salvo["ok"]:
+                    if _aguardar_salvar(pagina):
                         _log(f"Salvo detectado ({tipo}).")
                         for item in its:
                             if item.get("id"):

@@ -6,12 +6,61 @@
   <h4 class="mb-0">📋 Revisar Faturas Extraídas</h4>
   <div class="d-flex align-items-center gap-2">
     <span class="badge bg-warning text-dark fs-6">{{ pendentes|length }} pendente(s)</span>
+    <button class="btn btn-outline-primary" id="btn-replicar" onclick="replicarTarifas()"
+            title="Grava nas tarifas pendentes do LexDash o valor já calculado em outra usina do mesmo grupo (2–8 ou 101–103)">
+      🔁 Replicar tarifas pendentes
+    </button>
     <button class="btn btn-primary" id="btn-trigger" onclick="triggerDownload()">
       ▶ Iniciar Download
     </button>
   </div>
 </div>
 <div id="trigger-status" class="alert alert-info d-none mb-3"></div>
+<div id="replicar-status" class="alert alert-light border d-none mb-3">
+  <div id="replicar-msg" class="small"></div>
+  <pre id="replicar-log" class="mt-2 mb-0 small bg-dark text-light p-2 rounded d-none" style="max-height:300px;overflow-y:auto"></pre>
+</div>
+
+<div class="modal fade" id="modalReplicar" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">🔁 Verificar antes de gravar no LexDash</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          Tarifas pendentes cujo valor já foi cadastrado numa usina do mesmo grupo
+          (2–8 ou 101–103), para a mesma distribuidora, mês, modalidade e GD.
+          Desmarque o que não quiser gravar. Células que já tiverem valor no LexDash não são sobrescritas.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-3">
+            <thead class="table-light">
+              <tr>
+                <th><input type="checkbox" class="form-check-input" id="rep-todos" checked onchange="repMarcarTodos(this.checked)"></th>
+                <th>Mês</th>
+                <th>Distribuidora</th>
+                <th>Usina</th>
+                <th>Modalidade</th>
+                <th>GD</th>
+                <th class="text-end">Tarifa</th>
+                <th>Copiada de</th>
+                <th class="text-end">Faturas travadas</th>
+              </tr>
+            </thead>
+            <tbody id="rep-acoes"></tbody>
+          </table>
+        </div>
+        <div id="rep-pulados"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="rep-gravar" onclick="repGravar()">Gravar selecionadas</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% if pendentes %}
 <div class="card shadow-sm mb-4">
@@ -240,6 +289,135 @@ async function gravarLexDash() {
       msgEl.innerHTML = '<span class="text-danger">❌ Servidor local não respondeu.</span>';
       btn.disabled = false;
       btn.textContent = '🖨 Gravar no Sistema';
+    }
+  }, 2000);
+}
+
+const REP_LABEL = '🔁 Replicar tarifas pendentes';
+let _repAcoes = [];
+
+function _esc(v) {
+  const d = document.createElement('div');
+  d.textContent = v ?? '';
+  return d.innerHTML;
+}
+
+function _repStatus(html, log) {
+  document.getElementById('replicar-status').classList.remove('d-none');
+  document.getElementById('replicar-msg').innerHTML = html;
+  const logEl = document.getElementById('replicar-log');
+  if (log) { logEl.textContent = log; logEl.classList.remove('d-none'); logEl.scrollTop = logEl.scrollHeight; }
+  else if (log === '') { logEl.classList.add('d-none'); }
+}
+
+function _repBotao(ocupado, texto) {
+  const btn = document.getElementById('btn-replicar');
+  btn.disabled = ocupado;
+  btn.textContent = ocupado ? texto : REP_LABEL;
+}
+
+// Passo 1: pede ao agente local o plano (não grava nada) e mostra a tela de verificação
+async function replicarTarifas() {
+  _repBotao(true, '⏳ Calculando…');
+  _repStatus('<span class="text-warning">⏳ Lendo tarifas pendentes e o que já está no LexDash… (~30 s)</span>', '');
+  let res, j;
+  try {
+    res = await fetch('https://localhost:5002/replicar-tarifas/plano', {method: 'POST'});
+    j = await res.json().catch(() => ({}));
+  } catch (e) {
+    _repBotao(false);
+    return _repStatus('<span class="text-danger">❌ Servidor local não respondeu (o agente está rodando?).</span>');
+  }
+  _repBotao(false);
+  if (!res.ok) return _repStatus(`<span class="text-danger">❌ ${_esc(j.msg || 'Erro ao montar o plano.')}</span>`);
+
+  _repAcoes = j.acoes || [];
+  document.getElementById('replicar-status').classList.add('d-none');
+
+  const tbody = document.getElementById('rep-acoes');
+  tbody.innerHTML = _repAcoes.length ? _repAcoes.map((a, i) => `
+    <tr>
+      <td><input type="checkbox" class="form-check-input rep-cb" data-i="${i}" checked onchange="repContar()"></td>
+      <td>${_esc(a.mes)}</td>
+      <td>${_esc(a.distribuidora)}</td>
+      <td>${_esc(a.usina)} <small class="text-muted">${_esc(a.usina_nome)}</small></td>
+      <td>${_esc(a.modalidade)}</td>
+      <td>${_esc(a.gd)}</td>
+      <td class="text-end font-monospace fw-semibold">${Number(a.valor).toFixed(6).replace('.', ',')}</td>
+      <td><small>usina ${_esc(a.fontes.join(', '))}</small></td>
+      <td class="text-end">${_esc(a.faturas_travadas)}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="9" class="text-center text-muted py-3">Nada para replicar agora — nenhum pendente tem usina irmã já calculada.</td></tr>';
+
+  const pulados = j.pulados || [];
+  const semFonte = pulados.filter(x => x.motivo === 'nenhuma usina irmã calculada').length;
+  const outros = pulados.filter(x => x.motivo !== 'nenhuma usina irmã calculada');
+  document.getElementById('rep-pulados').innerHTML = (outros.length ? `
+    <div class="small fw-semibold mb-1">⚠ Não serão gravadas (${outros.length}):</div>
+    <ul class="small mb-2">${outros.map(x =>
+      `<li>${_esc(x.mes)} · ${_esc(x.distribuidora)} · usina ${_esc(x.usina)} · ${_esc(x.modalidade)} ${_esc(x.gd)} — <span class="text-danger">${_esc(x.motivo)}</span></li>`
+    ).join('')}</ul>` : '') +
+    (semFonte ? `<div class="small text-muted">${semFonte} pendente(s) ainda sem nenhuma usina irmã calculada — precisam ser calculados manualmente.</div>` : '');
+
+  document.getElementById('rep-todos').checked = true;
+  repContar();
+  new bootstrap.Modal(document.getElementById('modalReplicar')).show();
+}
+
+function repMarcarTodos(v) {
+  document.querySelectorAll('.rep-cb').forEach(cb => cb.checked = v);
+  repContar();
+}
+
+function repContar() {
+  const n = document.querySelectorAll('.rep-cb:checked').length;
+  const btn = document.getElementById('rep-gravar');
+  btn.textContent = `Gravar ${n} selecionada(s)`;
+  btn.disabled = n === 0;
+}
+
+// Passo 2: grava só as linhas marcadas (o LexDash abre e espera o Salvar)
+async function repGravar() {
+  const acoes = Array.from(document.querySelectorAll('.rep-cb:checked')).map(cb => _repAcoes[+cb.dataset.i]);
+  bootstrap.Modal.getInstance(document.getElementById('modalReplicar')).hide();
+  _repBotao(true, '⏳ Gravando…');
+  _repStatus('<span class="text-warning">⏳ Abrindo o LexDash… confira e clique Salvar em cada passagem.</span>', '');
+
+  let res;
+  try {
+    res = await fetch('https://localhost:5002/replicar-tarifas', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({acoes}),
+    });
+  } catch (e) {
+    _repBotao(false);
+    return _repStatus('<span class="text-danger">❌ Servidor local não respondeu (o agente está rodando?).</span>');
+  }
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    _repBotao(false);
+    return _repStatus(`<span class="text-danger">❌ ${_esc(j.msg || 'Erro ao iniciar.')}</span>`);
+  }
+
+  const poll = setInterval(async () => {
+    try {
+      const s = await fetch('https://localhost:5002/gravar-lexdash/status').then(r => r.json());
+      if (s.estado === 'rodando') {
+        const ultima = (s.log || 'Processando…').trim().split('\n').pop();
+        return _repStatus(`<span class="text-warning">⏳ ${_esc(ultima)}</span>`, s.log);
+      }
+      clearInterval(poll);
+      _repBotao(false);
+      if (s.estado === 'ok') {
+        _repStatus('<span class="text-success fw-semibold">✓ Replicação concluída — veja a conferência no log.</span>', s.log);
+      } else {
+        _repStatus('<span class="text-danger">❌ Erro durante a gravação. Veja o log abaixo.</span>', s.log);
+      }
+    } catch (e) {
+      clearInterval(poll);
+      _repBotao(false);
+      _repStatus('<span class="text-danger">❌ Servidor local não respondeu.</span>');
     }
   }, 2000);
 }
