@@ -91,17 +91,41 @@ e o navegador automatizado abre sozinho.
   reinicie o agente (comando acima).
 - **Desinstalar o autostart**: `./desinstalar_autostart.sh`
 
+## Replicar tarifas pendentes entre usinas irmãs
+
+As usinas **2 a 8** têm a tarifa calculada do mesmo jeito, e as **101, 102 e
+103** também entre si. O botão **🔁 Replicar tarifas pendentes** (tela
+Revisar) usa isso:
+
+1. Baixa a lista da tela *Tarifas pendentes de cadastro* (Streamlit,
+   `PENDENTES_URL` — tem padrão, só precisa ir no `.env` se o link mudar) e
+   lê o que já está gravado no LexDash.
+2. Para cada pendente, procura o valor numa usina irmã com a mesma
+   concessionária (nome exato), mês, modalidade e GD1/GD2. Se as irmãs
+   divergirem, não grava e avisa.
+3. Mostra uma **tela de verificação** com tudo o que seria gravado — você
+   desmarca o que não quiser.
+4. Ao clicar *Gravar selecionadas*, abre o LexDash, preenche só células
+   vazias e espera você clicar **Salvar** em cada passagem (GD1 / GD2 /
+   Cacau Show). Depois confere pela API se ficou gravado.
+
+Limitação: a grade não tem campo GD2 para Cacau Show, então esses pendentes
+ficam de fora.
+
 ## Rodar manualmente pela linha de comando (sem o dashboard)
 
 ```bash
 source .venv/bin/activate
 python preencher_lexdash.py --dry-run   # só mostra o que faria
 python preencher_lexdash.py             # preenche de verdade
+python replicar_tarifas.py              # só mostra o que replicaria
+python replicar_tarifas.py --gravar     # replica tudo (espera o Salvar)
 ```
 
 ## Arquivos
 
 - `preencher_lexdash.py` — lógica de automação do grid do LexDash (Playwright).
+- `replicar_tarifas.py` — replica tarifas pendentes a partir das usinas irmãs.
 - `login_lexdash.py` — abre o navegador para login manual e salva a sessão.
 - `servidor_local.py` — servidor Flask na porta 5002 chamado pelo dashboard.
 - `instalar_autostart.sh` / `desinstalar_autostart.sh` — liga/desliga o

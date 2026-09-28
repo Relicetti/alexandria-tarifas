@@ -8,6 +8,8 @@ LexDash automaticamente.
 Rotas (mesmo contrato que os templates index.html / revisar.html esperam):
     POST /gravar-lexdash          → preenche todos os itens aprovados
     POST /gravar-fatura           → preenche uma única fatura ({"fatura_id": N})
+    POST /replicar-tarifas/plano  → calcula (sem gravar) o que dá pra replicar das usinas irmãs
+    POST /replicar-tarifas        → grava as ações escolhidas na tela de verificação ({"acoes": [...]})
     GET  /gravar-lexdash/status   → {"estado": "idle|rodando|ok|erro", "log": "..."}
 
 Uso:
@@ -34,6 +36,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 import preencher_lexdash as pl
+import replicar_tarifas
 
 app = Flask(__name__)
 # O dashboard roda em outro domínio (Railway) e chama este servidor local via
@@ -56,11 +59,15 @@ def _append_log(msg):
         _estado["log"] = (_estado["log"] + "\n" + msg).strip()
 
 
-def _rodar(itens):
-    """Executa preencher() em background e atualiza o estado global."""
+def _rodar(itens=None, tarefa=None):
+    """Executa preencher() (ou a tarefa informada) em background e atualiza o
+    estado global."""
     _set_estado("rodando", "")
     try:
-        pl.preencher(itens, log_fn=_append_log)
+        if tarefa:
+            tarefa(log_fn=_append_log)
+        else:
+            pl.preencher(itens, log_fn=_append_log)
         _set_estado("ok")
     except Exception as e:
         print("!! Erro durante preenchimento:")
@@ -125,6 +132,36 @@ def gravar_fatura():
     }
 
     threading.Thread(target=_rodar, args=([item],), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+@app.route("/replicar-tarifas/plano", methods=["POST"])
+def replicar_tarifas_plano():
+    if _estado["estado"] == "rodando":
+        return jsonify({"msg": "Já existe um preenchimento em andamento."}), 409
+    try:
+        return jsonify(replicar_tarifas.planejar())
+    except Exception as e:
+        print("!! Erro ao montar plano de replicação:")
+        traceback.print_exc()
+        return jsonify({"msg": f"Erro ao montar o plano: {e}"}), 500
+
+
+@app.route("/replicar-tarifas", methods=["POST"])
+def replicar_tarifas_gravar():
+    if _estado["estado"] == "rodando":
+        return jsonify({"msg": "Já existe um preenchimento em andamento."}), 409
+
+    body = request.get_json(silent=True) or {}
+    try:
+        acoes = replicar_tarifas.validar_acoes(body.get("acoes"))
+    except (ValueError, KeyError, TypeError) as e:
+        return jsonify({"msg": str(e)}), 400
+    if not acoes:
+        return jsonify({"msg": "Nenhuma tarifa selecionada."}), 400
+
+    tarefa = lambda log_fn: replicar_tarifas.gravar(acoes, log_fn=log_fn)
+    threading.Thread(target=_rodar, kwargs={"tarefa": tarefa}, daemon=True).start()
     return jsonify({"ok": True})
 
 
