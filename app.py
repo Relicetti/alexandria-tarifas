@@ -837,16 +837,7 @@ def admin_recover_faturas():
 
 @app.route("/revisar")
 def revisar():
-    from flask import jsonify
-    pendentes  = db.get_pendentes("pendente")
-    aprovados  = db.get_pendentes("aprovado")
-    preenchidos = db.get_pendentes("preenchido")
-    return render_template(
-        "revisar.html",
-        pendentes=pendentes,
-        aprovados=aprovados,
-        preenchidos=preenchidos,
-    )
+    return render_template("revisar.html")
 
 
 def _inferir_grupo(distribuidora: str) -> str:
