@@ -148,6 +148,8 @@ def _parse_form(form):
         "tipo_gd":                  f.get("tipo_gd", "GD1"),
         "modalidade":               f.get("modalidade", "Geração Compartilhada"),
         "mes_referencia":           f["mes_referencia"][:7] + "-01",
+        "data_leitura_anterior":    (f.get("data_leitura_anterior") or "")[:10] or None,
+        "data_leitura_atual":       (f.get("data_leitura_atual") or "")[:10] or None,
         "valor_concessionaria":     _float(f.get("valor_concessionaria")),
         "consumo_kwh":              _float(f.get("consumo_kwh")),
         "injetada_kwh":             _float(f.get("injetada_kwh")),
@@ -913,6 +915,26 @@ def trigger_status():
     from flask import jsonify
     val = db.get_config("trigger_download")
     return jsonify({"trigger": val})
+
+
+@app.route("/api/bandeira-aneel")
+def api_bandeira_aneel():
+    """Bandeira oficial (ANEEL) do mês e do anterior, com o adicional sem impostos.
+    Com leitura_anterior/leitura_atual (YYYY-MM-DD), divide o período em dias por bandeira."""
+    from flask import jsonify
+    import aneel
+    mes = request.args.get("mes", "")[:7]
+    if len(mes) != 7:
+        return jsonify({"erro": "Informe mes=YYYY-MM"}), 400
+    try:
+        out = aneel.bandeira_do_mes(mes)
+        ant = request.args.get("leitura_anterior", "")[:10]
+        atu = request.args.get("leitura_atual", "")[:10]
+        if ant and atu and ant < atu:
+            out["periodo"] = aneel.bandeira_periodo(ant, atu)
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 502
 
 
 @app.route("/api/faturas/<int:id>")

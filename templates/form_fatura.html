@@ -99,6 +99,18 @@
                 value="{{ fatura.mes_referencia[:7] if fatura else (extraido.get('mes_referencia', mes_pre[:7]) if extraido else mes_pre[:7]) }}">
             </div>
           </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small">Leitura anterior</label>
+              <input type="date" name="data_leitura_anterior" class="form-control form-control-sm"
+                value="{{ pv('data_leitura_anterior') }}">
+            </div>
+            <div class="col">
+              <label class="form-label small">Leitura atual</label>
+              <input type="date" name="data_leitura_atual" class="form-control form-control-sm"
+                value="{{ pv('data_leitura_atual') }}">
+            </div>
+          </div>
           <div>
             <label class="form-label">Valor Fatura Concessionária (R$) <span class="text-muted small">opcional</span></label>
             <input type="number" step="0.01" name="valor_concessionaria" class="form-control"
@@ -157,6 +169,8 @@
       <div class="card mb-3">
         <div class="card-header fw-semibold">Bandeira Tarifária</div>
         <div class="card-body">
+          <!-- Bandeira oficial do mês (ANEEL) + conferência com a fatura — preenchido por atualizarBandeiraAneel() -->
+          <div id="aneel_bandeira" class="small mb-3" style="display:none"></div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input calc" type="checkbox" name="cobra_band" id="cobra_band"
               {{ 'checked' if fatura and fatura.cobra_band else '' }}>
@@ -1059,5 +1073,101 @@ const _distrib = document.getElementById('distribuidora');
 if (_distrib && _distrib.value) onDistribChange(_distrib.value);
 
 calcPreview();
+
+// ── Bandeira oficial do mês (ANEEL) e conferência com o que veio na fatura ──
+// A leitura cobre parte do mês anterior, então vale a bandeira do mês e a do anterior.
+const BAND_CAMPO = {'Amarela': 'amarela', 'Vermelha P1': 'verm_p1', 'Vermelha P2': 'verm_p2'};
+const BAND_LABEL = {amarela: 'Amarela', verm_p1: 'Vermelha P1', verm_p2: 'Vermelha P2'};
+let _bandAneel = null, _bandSeq = 0;
+
+// Os campos b_* se repetem nos blocos por grupo; vale o do bloco visível
+function valBand(nome) {
+  const els = [...document.querySelectorAll(`[name="${nome}"]`)];
+  const el = els.find(e => e.offsetParent !== null) || els[0];
+  return el ? (parseFloat(el.value) || 0) : 0;
+}
+
+function fmtKwh(v) { return 'R$ ' + v.toFixed(5).replace('.', ',') + '/kWh'; }
+function fmtMes(m) { return m ? m.slice(5, 7) + '/' + m.slice(0, 4) : ''; }
+
+function conferirBandeira() {
+  const box = document.getElementById('aneel_bandeira');
+  const d = _bandAneel;
+  if (!d) return;
+  if (d.erro || !d.atual) {
+    box.className = 'small mb-3 text-muted';
+    box.innerHTML = d.erro ? `ANEEL indisponível: ${d.erro}`
+                           : `ANEEL ainda não publicou a bandeira de ${fmtMes(d.mes)}.`;
+    box.style.display = '';
+    return;
+  }
+  const valor = b => b.rs_kwh ? ` (${fmtKwh(b.rs_kwh)} sem impostos)` : '';
+  // Com as datas de leitura: dias em cada bandeira. Sem elas: mês de referência e o anterior.
+  const per = d.periodo;
+  const partes = per ? per.partes
+                     : [{mes: d.mes_anterior, ...(d.anterior || {})}, {mes: d.mes, ...d.atual}];
+  let html = '<div><span class="badge bg-secondary me-1">ANEEL</span>';
+  html += per
+    ? `Leitura ${per.dias_total} dias: ` + partes.map(p =>
+        `<b>${p.dias} d</b> em ${fmtMes(p.mes)} — ${p.bandeira || 'não publicada'}${p.bandeira ? valor(p) : ''}`).join(' · ')
+    : partes.map(p => `<b>${fmtMes(p.mes)}</b>: ${p.bandeira || 'não publicada'}${p.bandeira ? valor(p) : ''}`).join(' · ') +
+      ' <span class="text-muted">(preencha as datas de leitura para ver os dias em cada bandeira)</span>';
+  html += '</div>';
+  if (per && per.rs_kwh_ponderado != null)
+    html += `<div>Adicional médio do período: <b>${fmtKwh(per.rs_kwh_ponderado)}</b> sem impostos</div>`;
+
+  // Bandeiras que a fatura pode cobrar (Verde não gera cobrança)
+  const oficiais = new Set(partes.filter(p => p.bandeira && BAND_CAMPO[p.bandeira]).map(p => BAND_CAMPO[p.bandeira]));
+  const avisos = [];
+  const naFatura = Object.keys(BAND_LABEL).filter(t => valBand(`b_${t}_cons_valor`) > 0);
+  naFatura.filter(t => !oficiais.has(t)).forEach(t =>
+    avisos.push(`A fatura tem bandeira ${BAND_LABEL[t]}, que a ANEEL não acionou no período.`));
+  if (oficiais.size && !naFatura.length)
+    avisos.push(`A ANEEL acionou ${[...oficiais].map(t => BAND_LABEL[t]).join(' / ')} no período, mas nenhum valor de bandeira foi preenchido.`);
+
+  // R$/kWh cobrado na fatura (com impostos) x adicional oficial do período (sem impostos).
+  // Sem datas de leitura, só dá para comparar se o mês e o anterior tiveram a mesma bandeira.
+  let ref = per ? per.rs_kwh_ponderado
+                : (d.anterior && d.anterior.bandeira === d.atual.bandeira ? d.atual.rs_kwh : null);
+  // com duas bandeiras no período a fatura divide os kWh entre as linhas — somar dá o total
+  const kwh = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_kwh`)).reduce((a, b) => a + b, 0);
+  const val = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_valor`)).reduce((a, b) => a + b, 0);
+  if (ref && kwh > 0 && val > 0) {
+    const unit = val / kwh, razao = unit / ref;
+    const ok = razao >= 0.97 && razao <= 1.6;   // impostos por dentro somam até ~40%
+    const txt = `Fatura: ${fmtKwh(unit)} com impostos = ${razao.toFixed(2).replace('.', ',')}× o oficial.`;
+    if (ok) html += `<div class="text-muted">${txt}</div>`;
+    else avisos.push(txt + ' Confira kWh, valores e datas de leitura.');
+  }
+  avisos.forEach(a => html += `<div class="text-warning-emphasis">⚠️ ${a}</div>`);
+  box.className = 'small mb-3 p-2 rounded ' + (avisos.length ? 'bg-warning-subtle' : 'bg-light');
+  box.innerHTML = html;
+  box.style.display = '';
+}
+
+async function atualizarBandeiraAneel() {
+  const mes = document.querySelector('[name=mes_referencia]')?.value;
+  if (!mes) return;
+  const ant = document.querySelector('[name=data_leitura_anterior]')?.value || '';
+  const atu = document.querySelector('[name=data_leitura_atual]')?.value || '';
+  const qs = new URLSearchParams({mes, leitura_anterior: ant, leitura_atual: atu});
+  const seq = ++_bandSeq;   // ao mudar várias datas seguidas, só vale a última resposta
+  let dados;
+  try {
+    const r = await fetch(`{{ url_for('api_bandeira_aneel') }}?${qs}`);
+    dados = await r.json();
+  } catch (e) {
+    dados = {erro: 'falha de rede', mes};
+  }
+  if (seq !== _bandSeq) return;
+  _bandAneel = dados;
+  conferirBandeira();
+}
+
+['mes_referencia', 'data_leitura_anterior', 'data_leitura_atual'].forEach(n =>
+  document.querySelector(`[name=${n}]`)?.addEventListener('change', atualizarBandeiraAneel));
+document.querySelectorAll('[name^="b_"]').forEach(el => el.addEventListener('input', conferirBandeira));
+document.querySelector('[name=grupo]')?.addEventListener('change', () => setTimeout(conferirBandeira));
+atualizarBandeiraAneel();
 </script>
 {% endblock %}

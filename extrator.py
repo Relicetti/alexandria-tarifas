@@ -20,6 +20,8 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
   "gd_evidencia": "trecho EXATO da fatura que indicou o tipo_gd (ex: 'Energia Atv Injetada GDII')" ou null,
   "instalacao": "número da instalação/UC (apenas dígitos)",
   "mes_referencia": "YYYY-MM (mês de competência/referência da fatura)",
+  "data_leitura_anterior": "YYYY-MM-DD (data da leitura anterior do medidor)" ou null,
+  "data_leitura_atual": "YYYY-MM-DD (data da leitura atual do medidor)" ou null,
   "consumo_kwh": número (kWh consumidos no período),
   "injetada_kwh": número (kWh injetados ou compensados pela GD, 0 se ausente),
   "valor_concessionaria": número (valor total da fatura em R$),
@@ -92,6 +94,10 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
 Instruções:
 - instalacao: procure por "Nº da Instalação", "UC", "Código de instalação" — retorne apenas os dígitos
 - mes_referencia: procure por "Mês de referência", "Competência", "Período" — formato YYYY-MM
+- data_leitura_anterior / data_leitura_atual: datas do período de leitura do medidor
+  ("Leitura Anterior" / "Leitura Atual", "Datas de Leituras", "Período de consumo 08/07/2026 a 06/08/2026",
+  "09/07/2026 a 06/08/2026 29 dias"). Converta DD/MM/AAAA → AAAA-MM-DD.
+  NÃO use a "Próxima Leitura", a data de emissão nem o vencimento.
 - consumo_kwh: kWh totais consumidos (pode aparecer como "Consumo faturado")
 - injetada_kwh: energia injetada/compensada pelo sistema GD solar
 
@@ -544,6 +550,32 @@ def _processar_enel_multi_mes(dados: dict) -> dict:
     return dados
 
 
+def _data_iso(v):
+    """'2026-08-06' ou '06/08/2026' → '2026-08-06'; qualquer outra coisa → None."""
+    from datetime import date
+    v = str(v or "").strip()
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", v) or re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", v)
+    if not m:
+        return None
+    a, b, c = m.groups()
+    ano, mes, dia = (a, b, c) if len(a) == 4 else (c, b, a)
+    try:
+        return date(int(ano), int(mes), int(dia)).isoformat()
+    except ValueError:
+        return None
+
+
+def _processar_datas_leitura(dados: dict) -> dict:
+    """Valida as datas de leitura; período invertido ou > 70 dias é descartado."""
+    from datetime import date
+    ant = _data_iso(dados.get("data_leitura_anterior"))
+    atu = _data_iso(dados.get("data_leitura_atual"))
+    if ant and atu and not (0 < (date.fromisoformat(atu) - date.fromisoformat(ant)).days <= 70):
+        ant = atu = None
+    dados["data_leitura_anterior"], dados["data_leitura_atual"] = ant, atu
+    return dados
+
+
 def _processar_aliquotas(dados: dict) -> dict:
     """
     Converte as alíquotas lidas em percentual (aliquota_*_pct, como impressas
@@ -639,6 +671,7 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
     dados = json.loads(text)
     dados = _processar_distribuidora(dados)
     dados = _processar_aliquotas(dados)
+    dados = _processar_datas_leitura(dados)
     dados = _processar_tipo_gd(dados)
     dados = _processar_celesc_gd2(dados)
     dados = _processar_enel_multi_mes(dados)
