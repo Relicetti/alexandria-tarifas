@@ -64,6 +64,38 @@ def _b_cons_val_only(d, denom):
     return val / denom if denom else 0.0
 
 
+def _tarifas_bandeira(d, legado):
+    """
+    (tarifa_b_cons, tarifa_b_inj) em R$/kWh.
+
+    Com `tarifa_bandeira` preenchida (adicional da ANEEL sem impostos,
+    ponderado pelos dias do período) o cálculo é manual e igual para todos os
+    grupos: bandeira_consumo = consumo × tarifa, bandeira_injeção = injetada ×
+    tarifa, adicional = consumo − injeção. As fórmulas de conc_com já fazem
+    exatamente essa conta com (tarifa, tarifa).
+
+    Sem ela (faturas antigas), usa `legado()`: a tarifa deduzida dos valores
+    de bandeira lidos da fatura, como antes.
+    """
+    t = d.get('tarifa_bandeira')
+    if t is not None and t != '':
+        t = float(t)
+        return t, t
+    return legado()
+
+
+def valores_bandeira(d):
+    """Bandeira em R$ no cálculo manual (None se a fatura usa o cálculo antigo)."""
+    t = d.get('tarifa_bandeira')
+    if t is None or t == '':
+        return None
+    t = float(t)
+    cons = _g(d, 'consumo_kwh') * t
+    inj  = _g(d, 'injetada_kwh') * t
+    return {"bandeira_consumo": round(cons, 2), "bandeira_injecao": round(inj, 2),
+            "adicional_bandeira": round(cons - inj, 2)}
+
+
 # ── variantes de conc_com ─────────────────────────────────────────────────────
 
 def _conc_A(consumo_residual, tarifa_dist, tarifa_comp, inj, tarifa_b_cons, tarifa_b_inj, consumo):
@@ -97,8 +129,7 @@ def calcular_GER(d):
 
     tarifa_dist = _g(d,'te_consumo') + _g(d,'tusd_consumo')
     tarifa_comp = _g(d,'te_compensada') + _g(d,'tusd_compensada')
-    tb_cons = _b_cons_kwh(d)
-    tb_inj  = _b_inj_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), _b_inj_kwh(d)))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_A(consumo - inj, tarifa_dist, tarifa_comp, inj, tb_cons, tb_inj, consumo)
@@ -123,8 +154,7 @@ def calcular_EQT(d):
                    + _g(d,'scee_beneficio_liquido'))
     tarifa_comp = (tarifa_dist * inj - scee_group1 - scee_group2) / inj if inj else 0.0
 
-    tb_cons = _b_cons_kwh(d)
-    tb_inj  = _b_inj_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), _b_inj_kwh(d)))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_B(consumo - inj, tarifa_dist, tarifa_comp, inj, tb_cons)
@@ -149,8 +179,7 @@ def calcular_NEOENERGIA(d):
     else:
         tarifa_comp = _g(d,'desconto_injecao') / inj if inj else 0.0
 
-    tb_cons = _b_cons_kwh(d)
-    tb_inj  = _b_inj_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), _b_inj_kwh(d)))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_C(consumo, tarifa_dist, tarifa_comp, inj, tb_cons, tb_inj)
@@ -173,8 +202,7 @@ def calcular_ENERGISA(d):
     tarifa_dist = _g(d, 'tarifa_distribuidora_input')
     tarifa_comp = _g(d,'tarifa_compensada_input') - (_g(d,'ajuste_gd2') / inj if inj else 0)
 
-    tb_cons = _b_cons_kwh(d)
-    tb_inj  = _b_inj_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), _b_inj_kwh(d)))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_B(consumo_residual, tarifa_dist, tarifa_comp, inj, tb_cons)
@@ -195,7 +223,7 @@ def calcular_LIGHT(d):
     consumo_residual = consumo - inj
 
     tarifa_dist_input = _g(d, 'tarifa_distribuidora_input')
-    tb_cons = _b_cons_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), 0.0))
 
     # tarifa_dist líquida: input menos bandeira; tarifa_bruta reconstitui o input
     tarifa_dist = tarifa_dist_input - tb_cons
@@ -210,7 +238,7 @@ def calcular_LIGHT(d):
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, d_base, desconto_ref_disponivel=True, desconto=desc,
                    impostos_com_desconto=bool(d.get('impostos_com_desconto')),
-                   tarifa_b_inj=0.0, cobra_band=cobra)
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 def calcular_CEMIG(d):
@@ -223,8 +251,7 @@ def calcular_CEMIG(d):
     scee_sum = _g(d,'scee_consumo') + _g(d,'scee_injecao') + _g(d,'scee_comp_nao_isento')
     tarifa_comp = (inj * tarifa_dist - scee_sum) / inj if inj else 0.0
 
-    tb_cons = _b_cons_kwh(d)
-    tb_inj  = _b_inj_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), _b_inj_kwh(d)))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_B(consumo - inj, tarifa_dist, tarifa_comp, inj, tb_cons)
@@ -246,7 +273,7 @@ def calcular_BRASILIA(d):
     tarifa_dist = _g(d, 'tarifa_distribuidora_input')
     tarifa_comp = _g(d,'tarifa_compensada_input') - (_g(d,'ajuste_gd2') / inj if inj else 0)
 
-    tb_cons = _b_cons_kwh(d)
+    tb_cons, tb_inj = _tarifas_bandeira(d, lambda: (_b_cons_kwh(d), 0.0))
 
     tarifa_bruta = (tarifa_dist + tb_cons if cobra else tarifa_dist) * (1 - desc)
     conc_com = _conc_B(consumo_residual, tarifa_dist, tarifa_comp, inj, tb_cons)
@@ -255,7 +282,7 @@ def calcular_BRASILIA(d):
     return _saidas(tarifa_dist, tarifa_comp, tarifa_bruta, conc_com, conc_sem,
                    inj, consumo, desc, desconto_ref_disponivel=False, desconto=desc,
                    impostos_com_desconto=bool(d.get('impostos_com_desconto')),
-                   tarifa_b_inj=0.0, cobra_band=cobra)
+                   tarifa_b_inj=tb_inj, cobra_band=cobra)
 
 
 # ── dispatcher ────────────────────────────────────────────────────────────────

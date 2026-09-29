@@ -150,6 +150,8 @@ def _parse_form(form):
         "mes_referencia":           f["mes_referencia"][:7] + "-01",
         "data_leitura_anterior":    (f.get("data_leitura_anterior") or "")[:10] or None,
         "data_leitura_atual":       (f.get("data_leitura_atual") or "")[:10] or None,
+        # vazio ≠ 0: vazio mantém o cálculo antigo; 0 é bandeira Verde
+        "tarifa_bandeira":          _float(f.get("tarifa_bandeira")) if (f.get("tarifa_bandeira") or "").strip() else None,
         "valor_concessionaria":     _float(f.get("valor_concessionaria")),
         "consumo_kwh":              _float(f.get("consumo_kwh")),
         "injetada_kwh":             _float(f.get("injetada_kwh")),

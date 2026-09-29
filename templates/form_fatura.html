@@ -171,6 +171,20 @@
         <div class="card-body">
           <!-- Bandeira oficial do mês (ANEEL) + conferência com a fatura — preenchido por atualizarBandeiraAneel() -->
           <div id="aneel_bandeira" class="small mb-3" style="display:none"></div>
+
+          <!-- Cálculo manual: consumo × tarifa − injeção × tarifa (tarifa ANEEL sem impostos) -->
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-5">
+              <label class="form-label small mb-0">Tarifa bandeira (R$/kWh, sem impostos)</label>
+              <input type="number" step="any" name="tarifa_bandeira" id="tarifa_bandeira" class="form-control form-control-sm calc"
+                value="{{ pv('tarifa_bandeira') }}" placeholder="preenchida pela ANEEL">
+              <button type="button" class="btn btn-link btn-sm p-0" id="btn_usar_aneel" style="display:none"
+                onclick="preencherTarifaBandeira(_tarifaAneel, true)">usar valor da ANEEL</button>
+            </div>
+            <div class="col-md-7 small" id="band_manual_res"></div>
+          </div>
+          <div class="form-text mb-3">Bandeira consumo = consumo × tarifa · Bandeira injeção = injeção × tarifa ·
+            Adicional = consumo − injeção. Vazio: usa os valores lidos da fatura (cálculo antigo).</div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input calc" type="checkbox" name="cobra_band" id="cobra_band"
               {{ 'checked' if fatura and fatura.cobra_band else '' }}>
@@ -182,6 +196,8 @@
             <label class="form-check-label" for="impostos_com_desconto">Aplicar desconto sobre impostos</label>
           </div>
 
+          <div class="small fw-semibold text-secondary mb-1">Valores de bandeira lidos da fatura
+            <span class="fw-normal">(conferência; só entram no cálculo se a tarifa acima estiver vazia)</span></div>
           <!-- GER / EQT / CEMIG: 6 campos com kWh -->
           <div id="bloco_band_kwh">
             <div class="table-responsive">
@@ -820,6 +836,15 @@ function onDistribChange(val) {
 function v(name) { return parseFloat(document.querySelector(`[name="${name}"]:not([disabled])`)?.value) || 0; }
 function bv(name) { return document.getElementById(name)?.checked || false; }
 
+function mostrarBandeiraManual(t, consumo, inj) {
+  const el = document.getElementById('band_manual_res');
+  if (!el) return;
+  if (t === null) { el.innerHTML = ''; return; }
+  const brl = x => 'R$ ' + x.toFixed(2).replace('.', ',');
+  const bc = consumo * t, bi = inj * t;
+  el.innerHTML = `Consumo <b>${brl(bc)}</b> − Injeção <b>${brl(bi)}</b> = Adicional <b>${brl(bc - bi)}</b>`;
+}
+
 function calcPreview() {
   const grupo = grupoAtual;
   if (!grupo) return;
@@ -848,6 +873,13 @@ function calcPreview() {
   const bi_val = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
   const bi_kwh = v('b_amarela_inj_kwh') + v('b_verm_p1_inj_kwh') + v('b_verm_p2_inj_kwh');
   tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
+  if (['LIGHT', 'BRASILIA'].includes(grupo)) tb_inj = 0;
+
+  // Cálculo manual (igual a calculos._tarifas_bandeira): tarifa única p/ consumo e injeção
+  const tbStr = document.getElementById('tarifa_bandeira')?.value.trim();
+  const manual = tbStr !== undefined && tbStr !== '';
+  if (manual) { tb_cons = tb_inj = parseFloat(tbStr) || 0; }
+  mostrarBandeiraManual(manual ? tb_cons : null, consumo, inj);
 
   // --- tarifa_comp ---
   console.log('calcPreview: grupo=', grupo, 'inj=', inj, 'consumo=', consumo);
@@ -886,7 +918,8 @@ function calcPreview() {
   if (grupo === 'GER')
     conc_com = res_kwh * td + (td - tc) * inj + tb_cons * consumo - inj * tb_inj;
   else if (grupo === 'NEOENERGIA') {
-    const bi_neo = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
+    const bi_neo = manual ? tb_inj * inj
+                          : v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
     conc_com = td * consumo + tb_cons * consumo - tc * inj - bi_neo;
   }
   else
@@ -1139,10 +1172,31 @@ function conferirBandeira() {
     if (ok) html += `<div class="text-muted">${txt}</div>`;
     else avisos.push(txt + ' Confira kWh, valores e datas de leitura.');
   }
+  preencherTarifaBandeira(per ? per.rs_kwh_ponderado : ref);
   avisos.forEach(a => html += `<div class="text-warning-emphasis">⚠️ ${a}</div>`);
   box.className = 'small mb-3 p-2 rounded ' + (avisos.length ? 'bg-warning-subtle' : 'bg-light');
   box.innerHTML = html;
   box.style.display = '';
+}
+
+// Preenche a tarifa com o valor da ANEEL enquanto o usuário não digitar outra.
+// Em fatura já salva não preenche sozinho (mudaria o resultado dela) — só pelo botão.
+const FATURA_NOVA = {{ 'false' if fatura else 'true' }};
+let _tarifaAneel = null;
+function preencherTarifaBandeira(valor, forcar = false) {
+  const el = document.getElementById('tarifa_bandeira');
+  _tarifaAneel = valor;
+  const btn = document.getElementById('btn_usar_aneel');
+  if (btn) btn.style.display = (valor != null && (+el.value).toFixed(6) !== (+valor).toFixed(6)) ? '' : 'none';
+  if (!el || valor == null) return;
+  if (!forcar) {
+    if (!FATURA_NOVA) return;
+    if (el.value.trim() !== '' && el.dataset.auto !== '1') return;   // digitada pelo usuário
+  }
+  el.value = (+valor).toFixed(6);
+  if (btn) btn.style.display = 'none';
+  el.dataset.auto = '1';
+  calcPreview();
 }
 
 async function atualizarBandeiraAneel() {
@@ -1167,6 +1221,7 @@ async function atualizarBandeiraAneel() {
 ['mes_referencia', 'data_leitura_anterior', 'data_leitura_atual'].forEach(n =>
   document.querySelector(`[name=${n}]`)?.addEventListener('change', atualizarBandeiraAneel));
 document.querySelectorAll('[name^="b_"]').forEach(el => el.addEventListener('input', conferirBandeira));
+document.getElementById('tarifa_bandeira')?.addEventListener('input', e => { e.target.dataset.auto = '0'; });
 document.querySelector('[name=grupo]')?.addEventListener('change', () => setTimeout(conferirBandeira));
 atualizarBandeiraAneel();
 </script>
