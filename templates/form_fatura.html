@@ -99,6 +99,18 @@
                 value="{{ fatura.mes_referencia[:7] if fatura else (extraido.get('mes_referencia', mes_pre[:7]) if extraido else mes_pre[:7]) }}">
             </div>
           </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small">Leitura anterior</label>
+              <input type="date" name="data_leitura_anterior" class="form-control form-control-sm"
+                value="{{ pv('data_leitura_anterior') }}">
+            </div>
+            <div class="col">
+              <label class="form-label small">Leitura atual</label>
+              <input type="date" name="data_leitura_atual" class="form-control form-control-sm"
+                value="{{ pv('data_leitura_atual') }}">
+            </div>
+          </div>
           <div>
             <label class="form-label">Valor Fatura Concessionária (R$) <span class="text-muted small">opcional</span></label>
             <input type="number" step="0.01" name="valor_concessionaria" class="form-control"
@@ -157,6 +169,23 @@
       <div class="card mb-3">
         <div class="card-header fw-semibold">Bandeira Tarifária</div>
         <div class="card-body">
+          <!-- Bandeira oficial do mês (ANEEL) + conferência com a fatura — preenchido por atualizarBandeiraAneel() -->
+          <div id="aneel_bandeira" class="small mb-3" style="display:none"></div>
+
+          <!-- Cálculo manual: consumo × tarifa − injeção × tarifa (tarifa ANEEL sem impostos) -->
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-5">
+              <label class="form-label small mb-0">Tarifa bandeira (R$/kWh, sem impostos)</label>
+              <input type="number" step="any" name="tarifa_bandeira" id="tarifa_bandeira" class="form-control form-control-sm calc"
+                value="{{ pv('tarifa_bandeira') }}" placeholder="preenchida pela ANEEL">
+              <button type="button" class="btn btn-link btn-sm p-0" id="btn_usar_aneel" style="display:none"
+                onclick="preencherTarifaBandeira(_tarifaAneel, true)">usar valor da ANEEL</button>
+            </div>
+            <div class="col-md-7 small" id="band_manual_res"></div>
+          </div>
+          <div class="form-text mb-3">Tarifa com impostos = ANEEL ÷ (1 − ICMS) ÷ (1 − (PIS + COFINS)) ·
+            Bandeira consumo = consumo × tarifa · Bandeira injeção = injeção × tarifa · Adicional = consumo − injeção.
+            Vazio: usa os valores lidos da fatura (cálculo antigo).</div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input calc" type="checkbox" name="cobra_band" id="cobra_band"
               {{ 'checked' if fatura and fatura.cobra_band else '' }}>
@@ -168,6 +197,8 @@
             <label class="form-check-label" for="impostos_com_desconto">Aplicar desconto sobre impostos</label>
           </div>
 
+          <div class="small fw-semibold text-secondary mb-1">Valores de bandeira lidos da fatura
+            <span class="fw-normal">(conferência; só entram no cálculo se a tarifa acima estiver vazia)</span></div>
           <!-- GER / EQT / CEMIG: 6 campos com kWh -->
           <div id="bloco_band_kwh">
             <div class="table-responsive">
@@ -642,7 +673,7 @@
 
       <!-- LIGHT: Impostos -->
       <div class="card mb-3 grupo-campo" id="bloco_impostos" style="display:none">
-        <div class="card-header fw-semibold">Impostos (para cálculo LIGHT)</div>
+        <div class="card-header fw-semibold">Impostos <span class="fw-normal small text-muted">— alíquotas da fatura (fração: 0,18 = 18%); aplicadas na tarifa da bandeira</span></div>
         <div class="card-body row g-2">
           <div class="col-4">
             <label class="form-label small">Alíquota ICMS</label>
@@ -772,7 +803,7 @@ function aplicarGrupo(grupo) {
   show('bloco_desc_aplicado', cfg.desc === 'base_aplic');
 
   // Impostos LIGHT
-  show('bloco_impostos', cfg.impostos);
+  show('bloco_impostos', true);   // alíquotas entram na tarifa da bandeira em todos os grupos
 
   // Painel CELESC GD2 (só relevante para GER)
   atualizarPainelCelesc();
@@ -806,6 +837,30 @@ function onDistribChange(val) {
 function v(name) { return parseFloat(document.querySelector(`[name="${name}"]:not([disabled])`)?.value) || 0; }
 function bv(name) { return document.getElementById(name)?.checked || false; }
 
+// Alíquota como fração; aceita percentual digitado (18 → 0,18) — igual a calculos._aliquota
+function aliq(nome) { const a = v(nome); return a > 1 ? a / 100 : a; }
+
+// 1 / (1 − ICMS) / (1 − (PIS + COFINS)) — igual a calculos.fator_impostos
+function fatorImpostos() {
+  const icms = aliq('aliquota_icms'), pc = aliq('aliquota_pis') + aliq('aliquota_cofins');
+  return (icms >= 1 || pc >= 1) ? 1 : 1 / (1 - icms) / (1 - pc);
+}
+
+function mostrarBandeiraManual(t, consumo, inj) {
+  const el = document.getElementById('band_manual_res');
+  if (!el) return;
+  if (t === null) { el.innerHTML = ''; return; }
+  const brl = x => 'R$ ' + x.toFixed(2).replace('.', ',');
+  const pct = x => (x * 100).toFixed(2).replace('.', ',') + '%';
+  const icms = aliq('aliquota_icms'), pc = aliq('aliquota_pis') + aliq('aliquota_cofins');
+  const bc = consumo * t, bi = inj * t;
+  el.innerHTML =
+    `Com impostos: <b>R$ ${t.toFixed(6).replace('.', ',')}/kWh</b> ` +
+    `<span class="text-muted">(ICMS ${pct(icms)}, PIS+COFINS ${pct(pc)})</span><br>` +
+    `Consumo <b>${brl(bc)}</b> − Injeção <b>${brl(bi)}</b> = Adicional <b>${brl(bc - bi)}</b>` +
+    (!icms && !pc ? '<div class="text-warning-emphasis">⚠️ Alíquotas zeradas — preencha ICMS/PIS/COFINS no quadro Impostos.</div>' : '');
+}
+
 function calcPreview() {
   const grupo = grupoAtual;
   if (!grupo) return;
@@ -834,6 +889,14 @@ function calcPreview() {
   const bi_val = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
   const bi_kwh = v('b_amarela_inj_kwh') + v('b_verm_p1_inj_kwh') + v('b_verm_p2_inj_kwh');
   tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
+  if (['LIGHT', 'BRASILIA'].includes(grupo)) tb_inj = 0;
+
+  // Cálculo manual (igual a calculos._tarifas_bandeira): tarifa ANEEL com impostos
+  // por dentro, a mesma p/ consumo e injeção
+  const tbStr = document.getElementById('tarifa_bandeira')?.value.trim();
+  const manual = tbStr !== undefined && tbStr !== '';
+  if (manual) { tb_cons = tb_inj = (parseFloat(tbStr) || 0) * fatorImpostos(); }
+  mostrarBandeiraManual(manual ? tb_cons : null, consumo, inj);
 
   // --- tarifa_comp ---
   console.log('calcPreview: grupo=', grupo, 'inj=', inj, 'consumo=', consumo);
@@ -872,7 +935,8 @@ function calcPreview() {
   if (grupo === 'GER')
     conc_com = res_kwh * td + (td - tc) * inj + tb_cons * consumo - inj * tb_inj;
   else if (grupo === 'NEOENERGIA') {
-    const bi_neo = v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
+    const bi_neo = manual ? tb_inj * inj
+                          : v('b_amarela_inj_valor') + v('b_verm_p1_inj_valor') + v('b_verm_p2_inj_valor');
     conc_com = td * consumo + tb_cons * consumo - tc * inj - bi_neo;
   }
   else
@@ -1059,5 +1123,129 @@ const _distrib = document.getElementById('distribuidora');
 if (_distrib && _distrib.value) onDistribChange(_distrib.value);
 
 calcPreview();
+
+// ── Bandeira oficial do mês (ANEEL) e conferência com o que veio na fatura ──
+// A leitura cobre parte do mês anterior, então vale a bandeira do mês e a do anterior.
+const BAND_CAMPO = {'Amarela': 'amarela', 'Vermelha P1': 'verm_p1', 'Vermelha P2': 'verm_p2'};
+const BAND_LABEL = {amarela: 'Amarela', verm_p1: 'Vermelha P1', verm_p2: 'Vermelha P2'};
+let _bandAneel = null, _bandSeq = 0;
+
+// Os campos b_* se repetem nos blocos por grupo; vale o do bloco visível
+function valBand(nome) {
+  const els = [...document.querySelectorAll(`[name="${nome}"]`)];
+  const el = els.find(e => e.offsetParent !== null) || els[0];
+  return el ? (parseFloat(el.value) || 0) : 0;
+}
+
+function fmtKwh(v) { return 'R$ ' + v.toFixed(5).replace('.', ',') + '/kWh'; }
+function fmtMes(m) { return m ? m.slice(5, 7) + '/' + m.slice(0, 4) : ''; }
+
+function conferirBandeira() {
+  const box = document.getElementById('aneel_bandeira');
+  const d = _bandAneel;
+  if (!d) return;
+  if (d.erro || !d.atual) {
+    box.className = 'small mb-3 text-muted';
+    box.innerHTML = d.erro ? `ANEEL indisponível: ${d.erro}`
+                           : `ANEEL ainda não publicou a bandeira de ${fmtMes(d.mes)}.`;
+    box.style.display = '';
+    return;
+  }
+  const valor = b => b.rs_kwh ? ` (${fmtKwh(b.rs_kwh)} sem impostos)` : '';
+  // Com as datas de leitura: dias em cada bandeira. Sem elas: mês de referência e o anterior.
+  const per = d.periodo;
+  const partes = per ? per.partes
+                     : [{mes: d.mes_anterior, ...(d.anterior || {})}, {mes: d.mes, ...d.atual}];
+  let html = '<div><span class="badge bg-secondary me-1">ANEEL</span>';
+  html += per
+    ? `Leitura ${per.dias_total} dias: ` + partes.map(p =>
+        `<b>${p.dias} d</b> em ${fmtMes(p.mes)} — ${p.bandeira || 'não publicada'}${p.bandeira ? valor(p) : ''}`).join(' · ')
+    : partes.map(p => `<b>${fmtMes(p.mes)}</b>: ${p.bandeira || 'não publicada'}${p.bandeira ? valor(p) : ''}`).join(' · ') +
+      ' <span class="text-muted">(preencha as datas de leitura para ver os dias em cada bandeira)</span>';
+  html += '</div>';
+  if (per && per.rs_kwh_ponderado != null)
+    html += `<div>Adicional médio do período: <b>${fmtKwh(per.rs_kwh_ponderado)}</b> sem impostos</div>`;
+
+  // Bandeiras que a fatura pode cobrar (Verde não gera cobrança)
+  const oficiais = new Set(partes.filter(p => p.bandeira && BAND_CAMPO[p.bandeira]).map(p => BAND_CAMPO[p.bandeira]));
+  const avisos = [];
+  const naFatura = Object.keys(BAND_LABEL).filter(t => valBand(`b_${t}_cons_valor`) > 0);
+  naFatura.filter(t => !oficiais.has(t)).forEach(t =>
+    avisos.push(`A fatura tem bandeira ${BAND_LABEL[t]}, que a ANEEL não acionou no período.`));
+  if (oficiais.size && !naFatura.length)
+    avisos.push(`A ANEEL acionou ${[...oficiais].map(t => BAND_LABEL[t]).join(' / ')} no período, mas nenhum valor de bandeira foi preenchido.`);
+
+  // R$/kWh cobrado na fatura (com impostos) x adicional oficial do período (sem impostos).
+  // Sem datas de leitura, só dá para comparar se o mês e o anterior tiveram a mesma bandeira.
+  let ref = per ? per.rs_kwh_ponderado
+                : (d.anterior && d.anterior.bandeira === d.atual.bandeira ? d.atual.rs_kwh : null);
+  // com duas bandeiras no período a fatura divide os kWh entre as linhas — somar dá o total
+  const kwh = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_kwh`)).reduce((a, b) => a + b, 0);
+  const val = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_valor`)).reduce((a, b) => a + b, 0);
+  if (ref && kwh > 0 && val > 0) {
+    // Com as alíquotas preenchidas, compara com ANEEL ÷ (1−ICMS) ÷ (1−(PIS+COFINS)) (±5%);
+    // sem elas, só dá para checar a faixa plausível de impostos (até ~40% por dentro).
+    const f = fatorImpostos(), comAliq = f > 1;
+    const esperado = ref * f, unit = val / kwh, razao = unit / esperado;
+    const ok = comAliq ? (razao >= 0.95 && razao <= 1.05) : (razao >= 0.97 && razao <= 1.6);
+    const txt = comAliq
+      ? `Fatura: ${fmtKwh(unit)} · esperado ANEEL + impostos: ${fmtKwh(esperado)} (${((razao - 1) * 100).toFixed(1).replace('.', ',')}%).`
+      : `Fatura: ${fmtKwh(unit)} com impostos = ${razao.toFixed(2).replace('.', ',')}× o oficial sem impostos.`;
+    if (ok) html += `<div class="text-muted">${txt}</div>`;
+    else avisos.push(txt + ' Confira kWh, valores e datas de leitura.');
+  }
+  preencherTarifaBandeira(per ? per.rs_kwh_ponderado : ref);
+  avisos.forEach(a => html += `<div class="text-warning-emphasis">⚠️ ${a}</div>`);
+  box.className = 'small mb-3 p-2 rounded ' + (avisos.length ? 'bg-warning-subtle' : 'bg-light');
+  box.innerHTML = html;
+  box.style.display = '';
+}
+
+// Preenche a tarifa com o valor da ANEEL enquanto o usuário não digitar outra.
+// Em fatura já salva não preenche sozinho (mudaria o resultado dela) — só pelo botão.
+const FATURA_NOVA = {{ 'false' if fatura else 'true' }};
+let _tarifaAneel = null;
+function preencherTarifaBandeira(valor, forcar = false) {
+  const el = document.getElementById('tarifa_bandeira');
+  _tarifaAneel = valor;
+  const btn = document.getElementById('btn_usar_aneel');
+  if (btn) btn.style.display = (valor != null && (+el.value).toFixed(6) !== (+valor).toFixed(6)) ? '' : 'none';
+  if (!el || valor == null) return;
+  if (!forcar) {
+    if (!FATURA_NOVA) return;
+    if (el.value.trim() !== '' && el.dataset.auto !== '1') return;   // digitada pelo usuário
+  }
+  el.value = (+valor).toFixed(6);
+  if (btn) btn.style.display = 'none';
+  el.dataset.auto = '1';
+  calcPreview();
+}
+
+async function atualizarBandeiraAneel() {
+  const mes = document.querySelector('[name=mes_referencia]')?.value;
+  if (!mes) return;
+  const ant = document.querySelector('[name=data_leitura_anterior]')?.value || '';
+  const atu = document.querySelector('[name=data_leitura_atual]')?.value || '';
+  const qs = new URLSearchParams({mes, leitura_anterior: ant, leitura_atual: atu});
+  const seq = ++_bandSeq;   // ao mudar várias datas seguidas, só vale a última resposta
+  let dados;
+  try {
+    const r = await fetch(`{{ url_for('api_bandeira_aneel') }}?${qs}`);
+    dados = await r.json();
+  } catch (e) {
+    dados = {erro: 'falha de rede', mes};
+  }
+  if (seq !== _bandSeq) return;
+  _bandAneel = dados;
+  conferirBandeira();
+}
+
+['mes_referencia', 'data_leitura_anterior', 'data_leitura_atual'].forEach(n =>
+  document.querySelector(`[name=${n}]`)?.addEventListener('change', atualizarBandeiraAneel));
+document.querySelectorAll('[name^="b_"]').forEach(el => el.addEventListener('input', conferirBandeira));
+document.getElementById('tarifa_bandeira')?.addEventListener('input', e => { e.target.dataset.auto = '0'; });
+document.querySelectorAll('[name^="aliquota_"]').forEach(el => el.addEventListener('input', conferirBandeira));
+document.querySelector('[name=grupo]')?.addEventListener('change', () => setTimeout(conferirBandeira));
+atualizarBandeiraAneel();
 </script>
 {% endblock %}

@@ -127,6 +127,9 @@ _INLINE_COLS = [
     ("modalidade",  "TEXT DEFAULT 'Geração Compartilhada'"),
     ("impostos_com_desconto", "INTEGER NOT NULL DEFAULT 0"),
     ("extraido_original_json", "TEXT"),  # snapshot da extração IA, p/ feedback em edições futuras
+    ("data_leitura_anterior", "TEXT"),   # YYYY-MM-DD — define os dias em cada bandeira
+    ("data_leitura_atual",    "TEXT"),
+    ("tarifa_bandeira",       "REAL"),   # R$/kWh sem impostos (ANEEL, ponderada pelos dias); NULL = cálculo antigo
 ]
 
 
@@ -357,7 +360,7 @@ def init_db():
 _INPUT_COLS = [
     "cliente_id",
     "usina_id", "distribuidora", "instalacao", "grupo", "tipo_gd", "modalidade",
-    "mes_referencia", "valor_concessionaria",
+    "mes_referencia", "data_leitura_anterior", "data_leitura_atual", "tarifa_bandeira", "valor_concessionaria",
     "consumo_kwh", "injetada_kwh", "desconto_base", "desconto_aplicado", "cobra_band", "impostos_com_desconto",
     "te_consumo", "tusd_consumo", "te_compensada", "tusd_compensada",
     "tusd_distribuidora", "te_distribuidora", "desconto_injecao",
