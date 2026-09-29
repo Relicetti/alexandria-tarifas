@@ -12,7 +12,12 @@ _PROMPT_BASE = """Você está analisando uma fatura de energia elétrica brasile
 Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
 
 {
-  "distribuidora": "nome da concessionária de energia",
+  "distribuidora": "nome da concessionária EXATAMENTE como aparece na LISTA DE CONCESSIONÁRIAS no fim deste prompt",
+  "distribuidora_nome_fatura": "razão social da distribuidora como impressa na fatura",
+  "distribuidora_cnpj": "CNPJ da DISTRIBUIDORA (emitente da nota, no cabeçalho) — NÃO o do cliente" ou null,
+  "uf": "UF (2 letras) do endereço da unidade consumidora",
+  "tipo_gd": "GD1 ou GD2",
+  "gd_evidencia": "trecho EXATO da fatura que indicou o tipo_gd (ex: 'Energia Atv Injetada GDII')" ou null,
   "instalacao": "número da instalação/UC (apenas dígitos)",
   "mes_referencia": "YYYY-MM (mês de competência/referência da fatura)",
   "consumo_kwh": número (kWh consumidos no período),
@@ -43,11 +48,11 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
   "tusd_fornecida_gd": número (TUSD fornecida GD R$/kWh — faturas LIGHT) ou null,
   "te_fornecida_gd": número (TE fornecida GD R$/kWh — faturas LIGHT) ou null,
 
-  "aliquota_icms": número (alíquota ICMS ex: 0.25) ou 0,
+  "aliquota_icms_pct": número (alíquota ICMS EM PERCENTUAL, como impressa — ex: 18,00 → 18.0) ou null,
   "valor_icms": número (valor ICMS em R$) ou 0,
-  "aliquota_pis": número (alíquota PIS ex: 0.0065) ou 0,
+  "aliquota_pis_pct": número (alíquota PIS/PASEP EM PERCENTUAL, como impressa — ex: 1,6500 → 1.65) ou null,
   "valor_pis": número (valor PIS em R$) ou 0,
-  "aliquota_cofins": número (alíquota COFINS ex: 0.03) ou 0,
+  "aliquota_cofins_pct": número (alíquota COFINS EM PERCENTUAL, como impressa — ex: 7,6000 → 7.6) ou null,
   "valor_cofins": número (valor COFINS em R$) ou 0,
 
   "b_amarela_cons_kwh": número ou 0,
@@ -89,6 +94,45 @@ Instruções:
 - mes_referencia: procure por "Mês de referência", "Competência", "Período" — formato YYYY-MM
 - consumo_kwh: kWh totais consumidos (pode aparecer como "Consumo faturado")
 - injetada_kwh: energia injetada/compensada pelo sistema GD solar
+
+- Concessionária (distribuidora / distribuidora_cnpj / uf):
+  * distribuidora_cnpj = CNPJ impresso junto à razão social da distribuidora no cabeçalho
+    ou no "Beneficiário" do boleto. NUNCA use o CNPJ/CPF do cliente.
+  * Grupos com uma distribuidora por estado (Energisa, Enel, EDP, Equatorial, Neoenergia,
+    CPFL) — escolha pelo estado da própria distribuidora: ENERGISA MATO GROSSO → "Energisa MT",
+    ENERGISA MATO GROSSO DO SUL → "Energisa MS", ENERGISA SUL-SUDESTE → "Energisa Sul Sudeste",
+    ENERGISA TOCANTINS → "Energisa TO", EDP SP → "EDP SP", EDP ES → "EDP ES",
+    RGE SUL DISTRIBUIDORA → "RGE", CEEE Equatorial → "Equatorial CEEE".
+  * Se nenhuma concessionária da lista corresponder, devolva a razão social impressa.
+
+- Impostos (aliquota_*_pct / valor_*):
+  Quase toda fatura tem um QUADRO DE TRIBUTOS separado, com colunas
+  "Tributo | Base de cálculo (R$) | Alíquota (%) | Valor (R$)" e linhas ICMS, PIS (ou PIS/PASEP, PASEP)
+  e COFINS. Leia as alíquotas DESSE quadro, no formato percentual impresso:
+    "PIS 91,04 1,6500 1,50"  → aliquota_pis_pct = 1.65,  valor_pis = 1.50
+    "COFINS 91,04 7,6000 6,92" → aliquota_cofins_pct = 7.6, valor_cofins = 6.92
+    "ICMS 198,48 18,00 35,72"  → aliquota_icms_pct = 18.0,  valor_icms = 35.72
+  * Informe a alíquota mesmo quando a base ou o valor forem 0 (isenção) — a alíquota impressa continua valendo.
+  * Se houver MAIS DE UMA linha de ICMS (faixas, ex: CELESC 12% e 17%), use a alíquota da linha
+    com a MAIOR base de cálculo, e valor_icms = soma dos valores de ICMS.
+  * Se o quadro tiver linhas com base negativa (estorno, ex: EDP "PIS 142,11- 1,100-"), ignore-as
+    para a alíquota; valor = soma algébrica das linhas.
+  * Se não houver quadro, use a coluna "Alíquota ICMS (%)" dos itens de consumo, e para PIS/COFINS
+    procure a mensagem de alíquotas do mês. Se não achar, deixe null (não invente).
+
+- Tipo de GD (tipo_gd / gd_evidencia) — GD1 = geração anterior à Lei 14.300 (direito adquirido),
+  GD2 = geração nova, com cobrança gradual do Fio B. Procure nas linhas de energia injetada/compensada
+  e nas mensagens da fatura, NESTA ORDEM:
+  1) Marcador explícito de GD2: "GDII", "GD II", "GD_II", "GD2", "G2" (ex: "El oUC Me TE G2"),
+     "Parc. Inj. s/ Desc. - GD2", "Ajuste GDII", "classificada como GD_II" → tipo_gd = "GD2"
+  2) Marcador explícito de GD1: "GDI", "GD I", "GDI-I", "GD1", "G1-Comp", "Energia compensada GD I" → "GD1"
+     ATENÇÃO: "GDI" é GD1 e "GDII" é GD2 — confira se há um ou dois "I".
+  3) Sem marcador (comum em EDP, RGE, Light, Coelba, CEEE): compare a TUSD da energia
+     injetada/compensada com a TUSD do consumo. No GD2 o Fio B não é compensado, então a TUSD
+     compensada fica BEM MENOR (tipicamente 20–50% menor) → "GD2". Se forem praticamente
+     iguais → "GD1". Itens "Benefício Tarifário Bruto/Líquido" também indicam GD2.
+  * "Lei 14.300" sozinho NÃO indica GD2 — aparece também em faturas GD1.
+  * gd_evidencia = o trecho exato em que se baseou (a linha com o marcador, ou "TUSD comp 0,3374 vs consumo 0,4567").
 
 - Para faturas CELESC G2 (Geração Distribuída Remota — energia vinda de outra UC):
   Os itens da fatura seguem este padrão de códigos:
@@ -337,11 +381,21 @@ def _carregar_aprendizados() -> str:
     return ""
 
 
+def _lista_concessionarias() -> str:
+    from concessionarias import CONCESSIONARIAS
+    nomes = sorted({f'{c["nome"]} ({c["estado"]})' for c in CONCESSIONARIAS})
+    return (
+        "\n\nLISTA DE CONCESSIONÁRIAS (use o nome sem a UF entre parênteses no campo distribuidora):\n"
+        + "; ".join(nomes) + "\n"
+    )
+
+
 def _carregar_prompt() -> str:
+    base = _PROMPT_BASE + _lista_concessionarias()
     aprendizados = _carregar_aprendizados()
     if aprendizados:
-        return _PROMPT_BASE + _CABECALHO_APRENDIZADOS + aprendizados
-    return _PROMPT_BASE
+        return base + _CABECALHO_APRENDIZADOS + aprendizados
+    return base
 
 
 PROMPT = _carregar_prompt()
@@ -490,6 +544,63 @@ def _processar_enel_multi_mes(dados: dict) -> dict:
     return dados
 
 
+def _processar_aliquotas(dados: dict) -> dict:
+    """
+    Converte as alíquotas lidas em percentual (aliquota_*_pct, como impressas
+    no quadro de tributos) para a fração usada no resto do app (0.18, 0.0165).
+    Sem alíquota impressa mas com base e valor, calcula valor/base.
+    """
+    for imp in ("icms", "pis", "cofins"):
+        pct = dados.pop(f"aliquota_{imp}_pct", None)
+        try:
+            pct = float(pct) if pct is not None else None
+        except (TypeError, ValueError):
+            pct = None
+        if pct is not None and pct > 0:
+            dados[f"aliquota_{imp}"] = round(pct / 100, 6)
+        elif not dados.get(f"aliquota_{imp}"):
+            dados[f"aliquota_{imp}"] = 0
+    return dados
+
+
+_RE_GD2 = re.compile(r"GD[\s_]?II\b|GD[\s_-]?2\b|\bG2\b|GD_II", re.I)
+_RE_GD1 = re.compile(r"GD[\s_]?I\b|GDI-I|GD[\s_-]?1\b|\bG1\b", re.I)
+
+
+def _num(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _processar_tipo_gd(dados: dict) -> dict:
+    """
+    Decide GD1/GD2 pelo trecho que a IA citou (gd_evidencia), que é mais
+    confiável que a conclusão dela: "GDI" x "GDII" é fácil de confundir.
+    Campos que só existem no GD2 também contam. Sem nada disso, fica com a
+    resposta da IA; na falta dela, GD1.
+    """
+    evid = str(dados.get("gd_evidencia") or "")
+    tipo = str(dados.get("tipo_gd") or "").upper().replace(" ", "")
+    if _RE_GD2.search(evid):
+        tipo = "GD2"
+    elif _RE_GD1.search(evid):
+        tipo = "GD1"
+    elif _num(dados.get("scee_comp_nao_isento")) or _num(dados.get("ajuste_gd2")):
+        tipo = "GD2"
+    dados["tipo_gd"] = tipo if tipo in ("GD1", "GD2") else "GD1"
+    return dados
+
+
+def _processar_distribuidora(dados: dict) -> dict:
+    from concessionarias import normalizar_distribuidora
+    nome = dados.get("distribuidora") or dados.get("distribuidora_nome_fatura") or ""
+    dados["distribuidora"] = normalizar_distribuidora(
+        nome, uf=dados.get("uf"), cnpj=dados.get("distribuidora_cnpj"))
+    return dados
+
+
 def extrair_fatura(pdf_bytes: bytes) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -503,7 +614,7 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
 
     msg = client.messages.create(
         model="claude-sonnet-4-5",
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[{
             "role": "user",
             "content": [
@@ -526,6 +637,9 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
     text = re.sub(r"\s*```$", "", text)
 
     dados = json.loads(text)
+    dados = _processar_distribuidora(dados)
+    dados = _processar_aliquotas(dados)
+    dados = _processar_tipo_gd(dados)
     dados = _processar_celesc_gd2(dados)
     dados = _processar_enel_multi_mes(dados)
     dados = _processar_bandeiras(dados)

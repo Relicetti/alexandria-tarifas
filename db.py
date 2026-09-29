@@ -333,6 +333,15 @@ def init_db():
               AND (distribuidora IS NULL OR distribuidora = '')
         """)
 
+        # "RGE SUL" saiu da lista: é sempre a RGE. Renomeia o que ficou gravado
+        # (OR IGNORE: se a RGE já tiver a mesma tarifa, mantém a dela).
+        for tabela in ("clientes", "faturas"):
+            conn.execute(f"UPDATE {tabela} SET distribuidora='RGE' WHERE distribuidora='RGE SUL'")
+        try:
+            conn.execute("UPDATE OR IGNORE tarifas_gerador SET distribuidora='RGE' WHERE distribuidora='RGE SUL'")
+        except Exception:
+            pass  # tabela ainda não existe (criada em init_tarifas_gerador)
+
         # Normaliza distribuidoras nas faturas
         rows = conn.execute("SELECT id, distribuidora FROM faturas WHERE distribuidora IS NOT NULL").fetchall()
         for row in rows:
