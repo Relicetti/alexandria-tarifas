@@ -64,35 +64,59 @@ def _b_cons_val_only(d, denom):
     return val / denom if denom else 0.0
 
 
+def _aliquota(d, campo):
+    """Alíquota como fração; aceita percentual digitado (18 → 0.18)."""
+    a = _g(d, campo)
+    return a / 100 if a > 1 else a
+
+
+def fator_impostos(d):
+    """1 / (1 − ICMS) / (1 − (PIS + COFINS)), com as alíquotas da fatura."""
+    icms = _aliquota(d, 'aliquota_icms')
+    pis_cofins = _aliquota(d, 'aliquota_pis') + _aliquota(d, 'aliquota_cofins')
+    if icms >= 1 or pis_cofins >= 1:
+        return 1.0
+    return 1 / (1 - icms) / (1 - pis_cofins)
+
+
+def tarifa_bandeira_com_impostos(d):
+    """Tarifa ANEEL (sem impostos) com ICMS/PIS/COFINS por dentro; None se vazia."""
+    t = d.get('tarifa_bandeira')
+    if t is None or t == '':
+        return None
+    return float(t) * fator_impostos(d)
+
+
 def _tarifas_bandeira(d, legado):
     """
     (tarifa_b_cons, tarifa_b_inj) em R$/kWh.
 
     Com `tarifa_bandeira` preenchida (adicional da ANEEL sem impostos,
     ponderado pelos dias do período) o cálculo é manual e igual para todos os
-    grupos: bandeira_consumo = consumo × tarifa, bandeira_injeção = injetada ×
-    tarifa, adicional = consumo − injeção. As fórmulas de conc_com já fazem
-    exatamente essa conta com (tarifa, tarifa).
+    grupos, com os impostos por dentro:
+        tarifa = ANEEL / (1 − ICMS) / (1 − (PIS + COFINS))
+        bandeira_consumo = consumo × tarifa, bandeira_injeção = injetada × tarifa,
+        adicional = consumo − injeção.
+    As fórmulas de conc_com já fazem essa conta com (tarifa, tarifa).
 
     Sem ela (faturas antigas), usa `legado()`: a tarifa deduzida dos valores
     de bandeira lidos da fatura, como antes.
     """
-    t = d.get('tarifa_bandeira')
-    if t is not None and t != '':
-        t = float(t)
+    t = tarifa_bandeira_com_impostos(d)
+    if t is not None:
         return t, t
     return legado()
 
 
 def valores_bandeira(d):
     """Bandeira em R$ no cálculo manual (None se a fatura usa o cálculo antigo)."""
-    t = d.get('tarifa_bandeira')
-    if t is None or t == '':
+    t = tarifa_bandeira_com_impostos(d)
+    if t is None:
         return None
-    t = float(t)
     cons = _g(d, 'consumo_kwh') * t
     inj  = _g(d, 'injetada_kwh') * t
-    return {"bandeira_consumo": round(cons, 2), "bandeira_injecao": round(inj, 2),
+    return {"tarifa_bandeira_com_impostos": round(t, 6),
+            "bandeira_consumo": round(cons, 2), "bandeira_injecao": round(inj, 2),
             "adicional_bandeira": round(cons - inj, 2)}
 
 

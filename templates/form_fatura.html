@@ -183,8 +183,9 @@
             </div>
             <div class="col-md-7 small" id="band_manual_res"></div>
           </div>
-          <div class="form-text mb-3">Bandeira consumo = consumo × tarifa · Bandeira injeção = injeção × tarifa ·
-            Adicional = consumo − injeção. Vazio: usa os valores lidos da fatura (cálculo antigo).</div>
+          <div class="form-text mb-3">Tarifa com impostos = ANEEL ÷ (1 − ICMS) ÷ (1 − (PIS + COFINS)) ·
+            Bandeira consumo = consumo × tarifa · Bandeira injeção = injeção × tarifa · Adicional = consumo − injeção.
+            Vazio: usa os valores lidos da fatura (cálculo antigo).</div>
           <div class="form-check form-switch mb-3">
             <input class="form-check-input calc" type="checkbox" name="cobra_band" id="cobra_band"
               {{ 'checked' if fatura and fatura.cobra_band else '' }}>
@@ -672,7 +673,7 @@
 
       <!-- LIGHT: Impostos -->
       <div class="card mb-3 grupo-campo" id="bloco_impostos" style="display:none">
-        <div class="card-header fw-semibold">Impostos (para cálculo LIGHT)</div>
+        <div class="card-header fw-semibold">Impostos <span class="fw-normal small text-muted">— alíquotas da fatura (fração: 0,18 = 18%); aplicadas na tarifa da bandeira</span></div>
         <div class="card-body row g-2">
           <div class="col-4">
             <label class="form-label small">Alíquota ICMS</label>
@@ -802,7 +803,7 @@ function aplicarGrupo(grupo) {
   show('bloco_desc_aplicado', cfg.desc === 'base_aplic');
 
   // Impostos LIGHT
-  show('bloco_impostos', cfg.impostos);
+  show('bloco_impostos', true);   // alíquotas entram na tarifa da bandeira em todos os grupos
 
   // Painel CELESC GD2 (só relevante para GER)
   atualizarPainelCelesc();
@@ -836,13 +837,28 @@ function onDistribChange(val) {
 function v(name) { return parseFloat(document.querySelector(`[name="${name}"]:not([disabled])`)?.value) || 0; }
 function bv(name) { return document.getElementById(name)?.checked || false; }
 
+// Alíquota como fração; aceita percentual digitado (18 → 0,18) — igual a calculos._aliquota
+function aliq(nome) { const a = v(nome); return a > 1 ? a / 100 : a; }
+
+// 1 / (1 − ICMS) / (1 − (PIS + COFINS)) — igual a calculos.fator_impostos
+function fatorImpostos() {
+  const icms = aliq('aliquota_icms'), pc = aliq('aliquota_pis') + aliq('aliquota_cofins');
+  return (icms >= 1 || pc >= 1) ? 1 : 1 / (1 - icms) / (1 - pc);
+}
+
 function mostrarBandeiraManual(t, consumo, inj) {
   const el = document.getElementById('band_manual_res');
   if (!el) return;
   if (t === null) { el.innerHTML = ''; return; }
   const brl = x => 'R$ ' + x.toFixed(2).replace('.', ',');
+  const pct = x => (x * 100).toFixed(2).replace('.', ',') + '%';
+  const icms = aliq('aliquota_icms'), pc = aliq('aliquota_pis') + aliq('aliquota_cofins');
   const bc = consumo * t, bi = inj * t;
-  el.innerHTML = `Consumo <b>${brl(bc)}</b> − Injeção <b>${brl(bi)}</b> = Adicional <b>${brl(bc - bi)}</b>`;
+  el.innerHTML =
+    `Com impostos: <b>R$ ${t.toFixed(6).replace('.', ',')}/kWh</b> ` +
+    `<span class="text-muted">(ICMS ${pct(icms)}, PIS+COFINS ${pct(pc)})</span><br>` +
+    `Consumo <b>${brl(bc)}</b> − Injeção <b>${brl(bi)}</b> = Adicional <b>${brl(bc - bi)}</b>` +
+    (!icms && !pc ? '<div class="text-warning-emphasis">⚠️ Alíquotas zeradas — preencha ICMS/PIS/COFINS no quadro Impostos.</div>' : '');
 }
 
 function calcPreview() {
@@ -875,10 +891,11 @@ function calcPreview() {
   tb_inj = bi_kwh ? bi_val / bi_kwh : 0;
   if (['LIGHT', 'BRASILIA'].includes(grupo)) tb_inj = 0;
 
-  // Cálculo manual (igual a calculos._tarifas_bandeira): tarifa única p/ consumo e injeção
+  // Cálculo manual (igual a calculos._tarifas_bandeira): tarifa ANEEL com impostos
+  // por dentro, a mesma p/ consumo e injeção
   const tbStr = document.getElementById('tarifa_bandeira')?.value.trim();
   const manual = tbStr !== undefined && tbStr !== '';
-  if (manual) { tb_cons = tb_inj = parseFloat(tbStr) || 0; }
+  if (manual) { tb_cons = tb_inj = (parseFloat(tbStr) || 0) * fatorImpostos(); }
   mostrarBandeiraManual(manual ? tb_cons : null, consumo, inj);
 
   // --- tarifa_comp ---
@@ -1166,9 +1183,14 @@ function conferirBandeira() {
   const kwh = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_kwh`)).reduce((a, b) => a + b, 0);
   const val = ['amarela', 'verm_p1', 'verm_p2'].map(t => valBand(`b_${t}_cons_valor`)).reduce((a, b) => a + b, 0);
   if (ref && kwh > 0 && val > 0) {
-    const unit = val / kwh, razao = unit / ref;
-    const ok = razao >= 0.97 && razao <= 1.6;   // impostos por dentro somam até ~40%
-    const txt = `Fatura: ${fmtKwh(unit)} com impostos = ${razao.toFixed(2).replace('.', ',')}× o oficial.`;
+    // Com as alíquotas preenchidas, compara com ANEEL ÷ (1−ICMS) ÷ (1−(PIS+COFINS)) (±5%);
+    // sem elas, só dá para checar a faixa plausível de impostos (até ~40% por dentro).
+    const f = fatorImpostos(), comAliq = f > 1;
+    const esperado = ref * f, unit = val / kwh, razao = unit / esperado;
+    const ok = comAliq ? (razao >= 0.95 && razao <= 1.05) : (razao >= 0.97 && razao <= 1.6);
+    const txt = comAliq
+      ? `Fatura: ${fmtKwh(unit)} · esperado ANEEL + impostos: ${fmtKwh(esperado)} (${((razao - 1) * 100).toFixed(1).replace('.', ',')}%).`
+      : `Fatura: ${fmtKwh(unit)} com impostos = ${razao.toFixed(2).replace('.', ',')}× o oficial sem impostos.`;
     if (ok) html += `<div class="text-muted">${txt}</div>`;
     else avisos.push(txt + ' Confira kWh, valores e datas de leitura.');
   }
@@ -1222,6 +1244,7 @@ async function atualizarBandeiraAneel() {
   document.querySelector(`[name=${n}]`)?.addEventListener('change', atualizarBandeiraAneel));
 document.querySelectorAll('[name^="b_"]').forEach(el => el.addEventListener('input', conferirBandeira));
 document.getElementById('tarifa_bandeira')?.addEventListener('input', e => { e.target.dataset.auto = '0'; });
+document.querySelectorAll('[name^="aliquota_"]').forEach(el => el.addEventListener('input', conferirBandeira));
 document.querySelector('[name=grupo]')?.addEventListener('change', () => setTimeout(conferirBandeira));
 atualizarBandeiraAneel();
 </script>
