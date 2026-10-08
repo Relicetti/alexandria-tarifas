@@ -70,16 +70,8 @@ Extraia os dados abaixo e retorne SOMENTE um JSON válido, sem texto adicional.
   "b_verm_p2_inj_kwh": número ou 0,
   "b_verm_p2_inj_valor": número ou 0,
 
-  "celesc_0p_preco": número (preço unit. c/trib. do item 0P) ou null — SÓ para CELESC GD2,
-  "celesc_0p_icms": número (alíquota ICMS % do item 0P, ex: 12 ou 17) ou null — SÓ para CELESC GD2,
-  "celesc_0s_preco": número (preço unit. c/trib. do item 0S) ou null — SÓ para CELESC GD2,
-  "celesc_0s_icms": número (alíquota ICMS % do item 0S, ex: 12 ou 17) ou null — SÓ para CELESC GD2,
-  "celesc_preco_12": número (preço unit. do item 12) ou null — SÓ para CELESC GD2,
-  "celesc_preco_13": número (preço unit. do item 13) ou null — SÓ para CELESC GD2,
-  "celesc_valor_0q": número (soma Valor R$ de todas as linhas 0Q) ou null — SÓ para CELESC GD2 Autoconsumo,
-  "celesc_valor_12": número (soma Valor R$ de todas as linhas 12, negativo) ou null — SÓ para CELESC GD2 Autoconsumo,
-  "celesc_valor_0t": número (soma Valor R$ de TODAS as linhas 0T) ou null — SÓ para CELESC GD2 Autoconsumo,
-  "celesc_valor_13": número (soma Valor R$ de todas as linhas 13, negativo) ou null — SÓ para CELESC GD2 Autoconsumo,
+  "celesc_itens": [ {"codigo": "0P", "descricao": "Consumo TE", "kwh": 150.0, "preco": 0.401133, "valor": 60.17, "icms": 12.0}, ... ] ou null — SÓ para CELESC (ver instruções),
+  "celesc_subtotal": número (o primeiro "SUBTOTAL" do quadro de itens) ou null — SÓ para CELESC,
 
   "enel_te_consumida_faturada": número (Preço unit. da linha "Energia Consumida Faturada TE") ou null — SÓ Enel GD1 c/ múltiplos meses de compensação,
   "enel_tusd_consumida_faturada": número (Preço unit. da linha "Energia Consumida Faturada TUSD") ou null — idem,
@@ -119,7 +111,7 @@ Instruções:
     "COFINS 91,04 7,6000 6,92" → aliquota_cofins_pct = 7.6, valor_cofins = 6.92
     "ICMS 198,48 18,00 35,72"  → aliquota_icms_pct = 18.0,  valor_icms = 35.72
   * Informe a alíquota mesmo quando a base ou o valor forem 0 (isenção) — a alíquota impressa continua valendo.
-  * Se houver MAIS DE UMA linha de ICMS (faixas, ex: CELESC 12% e 17%), use a alíquota da linha
+  * Se houver MAIS DE UMA linha de ICMS (faixas, ex: 12% e 17%), use a alíquota da linha
     com a MAIOR base de cálculo, e valor_icms = soma dos valores de ICMS.
   * Se o quadro tiver linhas com base negativa (estorno, ex: EDP "PIS 142,11- 1,100-"), ignore-as
     para a alíquota; valor = soma algébrica das linhas.
@@ -140,101 +132,21 @@ Instruções:
   * "Lei 14.300" sozinho NÃO indica GD2 — aparece também em faturas GD1.
   * gd_evidencia = o trecho exato em que se baseou (a linha com o marcador, ou "TUSD comp 0,3374 vs consumo 0,4567").
 
-- Para faturas CELESC G2 (Geração Distribuída Remota — energia vinda de outra UC):
-  Os itens da fatura seguem este padrão de códigos:
-  * (0P) Consumo TE         — kWh residuais (com ICMS), preço inclui impostos
-  * (0Q) Con TE Is I/P/C   — kWh compensados pela injeção GD2 (isentos ICMS/PIS/COFINS), mesmo preço unitário sem impostos
-  * (0S) Consumo TUSD       — kWh residuais TUSD (com ICMS)
-  * (0T) Con TUSD Is P/C    — kWh compensados TUSD (isentos PIS/COFINS), pode ter múltiplas faixas de ICMS
-  * (12) El oUC Me TE G2    — CRÉDITO TE da energia injetada de outra UC (valor negativo)
-  * (13) El oUC Me TU G2    — CRÉDITO TUSD da energia injetada de outra UC (valor negativo)
-  * (6U) Ben Tar Brut G2    — Benefício tarifário bruto GD2 (diferença TUSD cobrada vs creditada)
-  * (73) Ben Tar Líq G2     — Benefício tarifário líquido GD2 (mesmo valor negativo — cancela o (6U) nesta UC)
-
-  DOIS SUBTIPOS de CELESC G2 — identifique pelo que aparece na fatura:
-
-  SEMPRE preencha também os campos brutos celesc_* do JSON (além dos te_/tusd_ finais),
-  usando os valores exatos lidos da fatura, para que o usuário possa conferir/ajustar:
-  * celesc_0p_preco / celesc_0p_icms = "Preço unit." e "ICMS (%)" da linha (0P)
-    (se houver múltiplas linhas 0P, use a de maior kWh)
-  * celesc_0s_preco / celesc_0s_icms = "Preço unit." e "ICMS (%)" da linha (0S)
-    (se houver múltiplas linhas 0S, use a de maior kWh)
-  * celesc_preco_12 = "Preço unit." da linha (12)
-  * celesc_preco_13 = "Preço unit." da linha (13)
-  * Só para Autoconsumo (quando existem 0Q/0T na fatura):
-    celesc_valor_0q = soma "Valor R$" de todas as linhas (0Q)
-    celesc_valor_12 = soma "Valor R$" de todas as linhas (12)
-    celesc_valor_0t = soma "Valor R$" de TODAS as linhas (0T)
-    celesc_valor_13 = soma "Valor R$" de todas as linhas (13)
-
-  ── SUBTIPO A: Autoconsumo (mesma UC) ──
-  Fatura contém itens (0Q) e (0T) — são os kWh compensados dentro da própria UC.
-  Estrutura: 0P + 0Q + 0S + 0T + 12 + 13 + 6U + 73
-
-  REGRAS para CELESC G2 Autoconsumo:
-  * consumo_kwh  = soma de TODOS os kWh (0P) + soma de todos os kWh (0Q)
-  * injetada_kwh = kWh do item (12) ou (13) — são iguais
-  * grupo = "GER"
-  * ATENÇÃO: (0P) e (0S) podem aparecer em MÚLTIPLAS LINHAS (uma por faixa de ICMS).
-    Sempre calcule a MÉDIA PONDERADA pelo kWh:
-  * te_consumo_raw   = Σ(kWh_faixa_0P × preço_faixa_0P) / Σ(kWh_faixa_0P)
-  * tusd_consumo_raw = Σ(kWh_faixa_0S × preço_faixa_0S) / Σ(kWh_faixa_0S)
-
-  CORREÇÃO DE ICMS (para Autoconsumo):
-  Se ICMS de (0P) = 12%: te_consumo   = te_consumo_raw   × (1 − 0,12) / (1 − 0,17)
-  Se ICMS de (0P) = 17%: te_consumo   = te_consumo_raw   (usa como está)
-  Se ICMS de (0S) = 12%: tusd_consumo = tusd_consumo_raw × (1 − 0,12) / (1 − 0,17)
-  Se ICMS de (0S) = 17%: tusd_consumo = tusd_consumo_raw (usa como está)
-  Quando (0P) ou (0S) tiver múltiplas linhas com ICMS diferentes, aplique a correção
-  linha a linha antes de calcular a média ponderada.
-
-  FÓRMULAS FINAIS (Autoconsumo):
-  * valor_0q        = soma dos Valor R$ de todas as linhas (0Q)
-  * valor_12        = soma dos Valor R$ de todas as linhas (12) — será negativo
-  * valor_0t        = soma dos Valor R$ de TODAS as linhas (0T) — soma tudo, qualquer ICMS
-  * valor_13        = soma dos Valor R$ de todas as linhas (13) — será negativo
-  * te_compensada   = (injetada_kwh × te_consumo   − (valor_0q + valor_12)) / injetada_kwh
-  * tusd_compensada = (injetada_kwh × tusd_consumo − (valor_0t + valor_13)) / injetada_kwh
-
-  Exemplo Autoconsumo (08/2026 — ASSOCIACAO USINAS ALEXANDRIA II):
-      injetada_kwh    = 140,610
-      (0P) ICMS 12% → te_consumo_raw = 0,394947 → corrigido: 0,394947 × 0,88/0,83 = 0,418737
-      (0S) ICMS 12% → tusd_consumo_raw = 0,458568 → corrigido: 0,458568 × 0,88/0,83 = 0,486193
-      valor_0q = 45,27  |  valor_12 = -45,26  →  soma = 0,01
-      valor_0t = 31,26 + 30,17 = 61,43  |  valor_13 = -41,35  →  soma = 20,08
-      te_compensada   = (140,610 × 0,418737 − 0,01)  / 140,610 = 0,418666
-      tusd_compensada = (140,610 × 0,486193 − 20,08) / 140,610 = 0,343414
-
-  ── SUBTIPO B: Geração Compartilhada (outra UC) ──
-  Fatura NÃO contém itens (0Q) nem (0T). Só há (0P), (0S), (12), (13), (6U), (73).
-  O consumidor paga o consumo total em (0P)/(0S) e recebe crédito direto em (12)/(13).
-
-  REGRAS para CELESC G2 Geração Compartilhada:
-  * consumo_kwh  = kWh do item (0P)
-  * injetada_kwh = kWh do item (12) ou (13) — são iguais
-  * grupo = "GER"
-
-  CORREÇÃO DE ICMS (para Geração Compartilhada):
-  Aplica a mesma lógica: se ICMS de (0P)/(0S) for 12%, corrige para 17%.
-  Se já for 17%, usa como está.
-  Se ICMS de (0P) = 12%: te_consumo   = preço(0P) × (1 − 0,12) / (1 − 0,17)
-  Se ICMS de (0P) = 17%: te_consumo   = preço(0P)
-  Se ICMS de (0S) = 12%: tusd_consumo = preço(0S) × (1 − 0,12) / (1 − 0,17)
-  Se ICMS de (0S) = 17%: tusd_consumo = preço(0S)
-
-  FÓRMULAS FINAIS (Geração Compartilhada) — simples, pega direto da fatura:
-  * te_compensada   = preço unitário do item (12)   (coluna "Preço unit." da linha 12)
-  * tusd_compensada = preço unitário do item (13)   (coluna "Preço unit." da linha 13)
-
-  Exemplo Geração Compartilhada (08/2026 — EPPLER E BONELLI):
-      consumo_kwh  = 278,000  |  injetada_kwh = 256,597
-      (0P) ICMS 17% → te_consumo   = 0,418921  (sem correção)
-      (0S) ICMS 17% → tusd_consumo = 0,486295  (sem correção)
-      te_compensada   = 0,321930  (preço unitário do item 12)
-      tusd_compensada = 0,294104  (preço unitário do item 13)
-
-- Para faturas CELESC G1 (geração local, sem injeção remota): usar o padrão GER normal
-  (te_consumo + tusd_consumo separados, te_compensada + tusd_compensada, grupo = "GER")
+- Para faturas CELESC (qualquer tipo — GD1, GD2, local, remota, com ou sem 0Q/0T):
+  NÃO calcule tarifas. Transcreva em celesc_itens TODAS as linhas do quadro de itens faturados,
+  na ordem, até o primeiro "SUBTOTAL" (exclusive). Cada linha começa com um código entre
+  parênteses — (0P), (0Q), (0R), (0S), (0T), (12), (13), (6U), (73), (75), (76)... — e tem as colunas
+  "Quant. | Preço unit. c/ trib. | Valor R$ | PIS/COFINS | Base ICMS | ICMS % | ICMS R$ | Tarifa s/ trib.".
+  * codigo    = o código sem parênteses ("0P", "12", "6U")
+  * descricao = o texto da linha, como impresso ("EI oUC Ma TE G2", "En Injetad TE")
+  * kwh       = a quantidade (0 se não houver)
+  * preco     = "Preço unit." (c/ trib.), COM o sinal impresso
+  * valor     = "Valor R$", COM o sinal impresso (créditos são negativos)
+  * icms      = "ICMS %" da linha (ex: 12, 17 ou 0)
+  Copie os números EXATAMENTE como impressos — NUNCA corrija ICMS, some faixas ou junte linhas
+  repetidas: cada faixa de ICMS é uma linha separada. celesc_subtotal = valor do primeiro SUBTOTAL.
+  As tarifas (te_/tusd_), consumo_kwh, injetada_kwh e tipo_gd são recalculados em Python a partir
+  dessas linhas; preencha-os com sua melhor leitura mesmo assim. grupo = "GER".
 
 - Para faturas Enel (CE/GO/RJ/SP) GD1 Geração Compartilhada com MAIS DE UMA linha
   "Energia Atv Inj TE/TUSD oUC MM/YYYY ... GD1" (créditos de compensação vindos de
@@ -270,7 +182,7 @@ Instruções:
   NÃO preencha estes campos enel_* — use o padrão GER normal
   (te_compensada/tusd_compensada = preço unitário dessa linha única).
 
-- Para faturas com MÚLTIPLAS FAIXAS DE ICMS no consumo (ex: CELESC G1, CEEE — faixa 12% e faixa 17%):
+- Para faturas com MÚLTIPLAS FAIXAS DE ICMS no consumo (ex: CEEE — faixa 12% e faixa 17%; CELESC segue a regra própria acima):
   As linhas de "Consumo TE" e "Consumo TUSD" aparecem REPETIDAS com kWh e tarifas diferentes.
   Neste caso calcule a MÉDIA PONDERADA pelo kWh de cada faixa:
   * te_consumo   = Σ(kWh_faixa × preço_TE_faixa)   / Σ(kWh_faixa)   — use "Preço unit. c/ trib."
@@ -280,7 +192,7 @@ Instruções:
   * te_compensada   = Σ(kWh_inj × |preço_TE_inj|)   / Σ(kWh_inj)   — use valor absoluto da tarifa
   * tusd_compensada = Σ(kWh_inj × |preço_TUSD_inj|) / Σ(kWh_inj)
   * injetada_kwh = soma total dos kWh injetados
-  Exemplo CELESC G1: TE faixa1=150kWh×0,377933 + faixa2=1240kWh×0,400726 → te_consumo=(56,69+496,90)/1390=0,398482
+  Exemplo: TE faixa1=150kWh×0,377933 + faixa2=1240kWh×0,400726 → te_consumo=(56,69+496,90)/1390=0,398482
 - Para faturas EQT — Equatorial (AL/MA/PA/PI/GO/CEEE/CEA):
   A fatura Equatorial tem linhas com colunas: kWh | Preço c/ tributos | Preço s/ tributos | coluna4 | coluna5 | Valor R$ total
   Use SEMPRE o "Valor R$ total" (última coluna numérica da linha), NUNCA as colunas intermediárias (PIS, COFINS, ICMS).
@@ -460,67 +372,6 @@ def _processar_bandeiras(dados: dict) -> dict:
     return dados
 
 
-def _corrigir_icms(tarifa: float, icms_pct) -> float:
-    """Corrige tarifa 'por dentro' de ICMS 12% para 17%. Se já for 17% (ou
-    outro valor), retorna sem alteração."""
-    try:
-        icms = float(icms_pct)
-    except (TypeError, ValueError):
-        return tarifa
-    if round(icms) == 12:
-        return tarifa * (1 - 0.12) / (1 - 0.17)
-    return tarifa
-
-
-def _processar_celesc_gd2(dados: dict) -> dict:
-    """
-    Recalcula te_consumo/tusd_consumo/te_compensada/tusd_compensada de forma
-    DETERMINÍSTICA (em Python, não confiando na matemática da IA) para
-    faturas CELESC GD2, a partir dos campos brutos celesc_* extraídos.
-
-    Também define `modalidade` automaticamente: presença de celesc_valor_0q
-    indica Autoconsumo (tem itens 0Q/0T); ausência indica Geração
-    Compartilhada (só 0P/0S/12/13).
-    """
-    dist = (dados.get("distribuidora") or "").lower()
-    if "celesc" not in dist:
-        return dados
-
-    p0p = dados.get("celesc_0p_preco")
-    p0s = dados.get("celesc_0s_preco")
-    if p0p is None or p0s is None:
-        return dados  # não é GD2 / dados insuficientes — não mexe
-
-    te_consumo   = _corrigir_icms(float(p0p), dados.get("celesc_0p_icms"))
-    tusd_consumo = _corrigir_icms(float(p0s), dados.get("celesc_0s_icms"))
-
-    v0q = dados.get("celesc_valor_0q")
-    v12 = dados.get("celesc_valor_12")
-    v0t = dados.get("celesc_valor_0t")
-    v13 = dados.get("celesc_valor_13")
-    inj = float(dados.get("injetada_kwh") or 0)
-
-    if v0q is not None and inj:
-        # Subtipo Autoconsumo — fórmula completa com valores brutos
-        dados["modalidade"] = "Autoconsumo"
-        te_compensada   = (inj * te_consumo   - (float(v0q) + float(v12 or 0))) / inj
-        tusd_compensada = (inj * tusd_consumo - (float(v0t or 0) + float(v13 or 0))) / inj
-    else:
-        # Subtipo Geração Compartilhada — compensada = preço unit. de (12)/(13)
-        dados["modalidade"] = "Geração Compartilhada"
-        p12 = dados.get("celesc_preco_12")
-        p13 = dados.get("celesc_preco_13")
-        te_compensada   = float(p12) if p12 is not None else te_consumo
-        tusd_compensada = float(p13) if p13 is not None else tusd_consumo
-
-    dados["te_consumo"]      = round(te_consumo, 6)
-    dados["tusd_consumo"]    = round(tusd_consumo, 6)
-    dados["te_compensada"]   = round(te_compensada, 6)
-    dados["tusd_compensada"] = round(tusd_compensada, 6)
-    dados["tipo_gd"] = "GD2"  # a estrutura de itens 0P/0S/12/13 só existe em faturas GD2
-    return dados
-
-
 def _processar_enel_multi_mes(dados: dict) -> dict:
     """
     Recalcula te_compensada/tusd_compensada de forma DETERMINÍSTICA (em Python,
@@ -633,6 +484,127 @@ def _processar_distribuidora(dados: dict) -> dict:
     return dados
 
 
+# ── CELESC ────────────────────────────────────────────────────────────────────
+# A IA só transcreve as linhas do quadro de itens (celesc_itens); as contas
+# saem daqui. Uma regra para todos os formatos (GD1/GD2, local/remota, com ou
+# sem 0Q/0T), pensada para o conc_com do GER reproduzir a fatura:
+#   consumo × tarifa_consumo − injetada × tarifa_compensada = Σ valores das linhas
+_CELESC_CONSUMO = {"0P", "0Q", "0R"}          # linhas de TE com o kWh consumido
+_CELESC_TE      = {"0P", "0Q", "0R", "12"}
+_CELESC_TUSD    = {"0S", "0T", "13"}
+_CELESC_FAIXA_12 = 150                        # kWh com ICMS de 12% (SC)
+_FATOR_ICMS_12_17 = (1 - 0.12) / (1 - 0.17)  # preço c/ ICMS 12% → c/ ICMS 17%
+
+
+def _celesc_itens(dados: dict) -> list[dict]:
+    itens = []
+    for i in dados.get("celesc_itens") or []:
+        if not isinstance(i, dict):
+            continue
+        cod = str(i.get("codigo") or "").strip("() ").upper()
+        if cod:
+            itens.append({"codigo": cod, "descricao": str(i.get("descricao") or ""),
+                          "kwh": abs(_num(i.get("kwh"))), "preco": _num(i.get("preco")),
+                          "valor": _num(i.get("valor")), "icms": _num(i.get("icms"))})
+    return itens
+
+
+def _celesc_tarifa_consumo(itens: list[dict], codigo: str, consumo: float):
+    """
+    Preço c/ tributos que o cliente pagaria SEM a GD pelo consumo total: os
+    primeiros 150 kWh com ICMS de 12% e o resto com 17%. Os dois preços vêm das
+    linhas do item (0P ou 0S); faltando um deles, sai do outro pelo fator do
+    ICMS por dentro. Sem nenhuma linha a 12% na fatura (ex: comercial B3),
+    tudo a 17%.
+    """
+    linhas = [i for i in itens if i["codigo"] == codigo and i["kwh"] > 0 and i["preco"] > 0]
+    if not linhas or consumo <= 0:
+        return None
+    preco = {}
+    for i in sorted(linhas, key=lambda i: i["kwh"]):   # a linha de maior kWh prevalece
+        preco[round(i["icms"])] = i["preco"]
+    p12, p17 = preco.get(12), preco.get(17)
+    if p12 is None and p17 is None:   # alíquota fora do padrão de SC: média ponderada
+        return sum(i["kwh"] * i["preco"] for i in linhas) / sum(i["kwh"] for i in linhas)
+    if p17 is None:
+        p17 = p12 * _FATOR_ICMS_12_17
+    if not any(round(i["icms"]) == 12 for i in itens):
+        return p17
+    if p12 is None:
+        p12 = p17 / _FATOR_ICMS_12_17
+    k12 = min(_CELESC_FAIXA_12, consumo)
+    return (k12 * p12 + (consumo - k12) * p17) / consumo
+
+
+def _processar_celesc(dados: dict) -> dict:
+    """
+    Faturas CELESC: consumo, injetada, tipo de GD e as quatro tarifas saem das
+    linhas transcritas, nunca da conta da IA.
+      * consumo  = kWh de 0P + 0Q + 0R;  injetada = kWh das linhas (12)
+      * tarifa de consumo = _celesc_tarifa_consumo (0P para TE, 0S para TUSD)
+      * compensada = (consumo × tarifa_consumo − Σ valores) / injetada, com
+        Σ valores = 0P+0Q+0R+12 (TE) ou 0S+0T+13 (TUSD). Na compartilhada sem
+        0Q isso dá o preço do item (12)/(13); no autoconsumo, desconta o que
+        a fatura cobrou sobre a parte compensada.
+      * tipo_gd = GD2 se alguma linha tem o marcador "G2"; senão GD1.
+    Sem as linhas, a fatura fica com a leitura da IA.
+    """
+    if "celesc" not in (dados.get("distribuidora") or "").lower():
+        return dados
+    itens = _celesc_itens(dados)
+    if not itens:
+        return dados
+
+    # Conferência da transcrição: a soma das linhas tem que bater com o SUBTOTAL.
+    subtotal = dados.get("celesc_subtotal")
+    if subtotal is not None:
+        soma = sum(i["valor"] for i in itens)
+        if abs(soma - _num(subtotal)) > 0.05:
+            dados["_aviso_extracao"] = (
+                f"Celesc: a soma das linhas lidas (R$ {soma:.2f}) não bate com o SUBTOTAL "
+                f"da fatura (R$ {_num(subtotal):.2f}). Confira as tarifas.")
+
+    def kwh(cods):
+        return sum(i["kwh"] for i in itens if i["codigo"] in cods)
+
+    def valor(cods):
+        return sum(i["valor"] for i in itens if i["codigo"] in cods)
+
+    consumo = kwh(_CELESC_CONSUMO)
+    inj     = kwh({"12"})
+    if consumo > 0:
+        dados["consumo_kwh"] = round(consumo, 3)
+    dados["injetada_kwh"] = round(inj, 3)
+    dados["grupo"] = "GER"
+    dados["scee_beneficio_bruto"] = dados["scee_beneficio_liquido"] = 0   # (6U)/(73) se anulam
+
+    for pre, cod, linhas in (("te", "0P", _CELESC_TE), ("tusd", "0S", _CELESC_TUSD)):
+        t = _celesc_tarifa_consumo(itens, cod, consumo)
+        if t is None:
+            continue
+        dados[f"{pre}_consumo"] = round(t, 6)
+        dados[f"{pre}_compensada"] = (
+            round((consumo * t - valor(linhas)) / inj, 6) if inj else None)
+
+    # A Celesc marca com "G2" toda linha de GD2 — créditos (12)/(13) e benefício
+    # tarifário (6U)/(73). Sem "G2" é GD1, inclusive a geração local sem marcador.
+    gd2 = [i for i in itens if re.search(r"\bG2\b", i["descricao"])]
+    gd1 = [i for i in itens if re.search(r"\bG1\b", i["descricao"])]
+    if inj or gd2:
+        dados["tipo_gd"] = "GD2" if gd2 else "GD1"
+        ev = (gd2 or gd1)
+        dados["gd_evidencia"] = f'({ev[0]["codigo"]}) {ev[0]["descricao"]}' if ev else "Celesc sem marcador G2"
+
+    # Itens 0Q/0T (consumo compensado na própria fatura) ou geração local
+    # (crédito sem "oUC" = de outra UC) indicam autoconsumo.
+    local = any(i["codigo"] == "12" and "ouc" not in i["descricao"].lower() for i in itens)
+    if kwh({"0Q", "0T"}) > 0 or local:
+        dados["modalidade"] = "Autoconsumo"
+    elif inj:
+        dados["modalidade"] = "Geração Compartilhada"
+    return dados
+
+
 def extrair_fatura(pdf_bytes: bytes) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -673,7 +645,7 @@ def extrair_fatura(pdf_bytes: bytes) -> dict:
     dados = _processar_aliquotas(dados)
     dados = _processar_datas_leitura(dados)
     dados = _processar_tipo_gd(dados)
-    dados = _processar_celesc_gd2(dados)
+    dados = _processar_celesc(dados)
     dados = _processar_enel_multi_mes(dados)
     dados = _processar_bandeiras(dados)
     return dados

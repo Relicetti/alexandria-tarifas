@@ -394,6 +394,8 @@ def upload_fatura():
             token = _salvar_extraido(dados)
             _log_debug(f"UPLOAD OK: dist={dados.get('distribuidora')} inst={dados.get('instalacao')} chaves={list(dados.keys())} token={token}")
             flash("✅ Dados extraídos! Revise e salve.", "success")
+            if dados.get("_aviso_extracao"):
+                flash("⚠️ " + dados["_aviso_extracao"], "warning")
             return redirect(url_for("form_fatura", _extr=token))
         except ValueError as e:
             flash(str(e), "danger")
