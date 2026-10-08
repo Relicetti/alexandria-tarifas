@@ -488,11 +488,8 @@ def _processar_distribuidora(dados: dict) -> dict:
 # A IA só transcreve as linhas do quadro de itens (celesc_itens); as contas
 # saem daqui, para todos os formatos (GD1/GD2, local/remota, com ou sem 0Q/0T).
 _CELESC_CONSUMO = {"0P", "0Q", "0R"}          # linhas de TE com o kWh consumido
-_CELESC_TE      = {"0P", "0Q", "0R", "12"}
-_CELESC_TUSD    = {"0S", "0T", "13"}
-_CELESC_COMPENSADO = {"0Q", "0R", "0T"}       # consumo compensado na própria fatura
-_CELESC_FAIXA_12 = 150                        # kWh com ICMS de 12% (SC)
-_FATOR_ICMS_12_17 = (1 - 0.12) / (1 - 0.17)  # preço c/ ICMS 12% → c/ ICMS 17%
+# (linhas de consumo, linhas da parte compensada, linha de crédito) por tarifa
+_CELESC_LINHAS = {"te": ("0P", {"0Q", "0R"}, "12"), "tusd": ("0S", {"0T"}, "13")}
 
 
 def _celesc_itens(dados: dict) -> list[dict]:
@@ -508,31 +505,12 @@ def _celesc_itens(dados: dict) -> list[dict]:
     return itens
 
 
-def _celesc_tarifa_consumo(itens: list[dict], codigo: str, consumo: float):
-    """
-    Preço c/ tributos que o cliente pagaria SEM a GD pelo consumo total: os
-    primeiros 150 kWh com ICMS de 12% e o resto com 17%. Os dois preços vêm das
-    linhas do item (0P ou 0S); faltando um deles, sai do outro pelo fator do
-    ICMS por dentro. Sem nenhuma linha a 12% na fatura (ex: comercial B3),
-    tudo a 17%.
-    """
-    linhas = [i for i in itens if i["codigo"] == codigo and i["kwh"] > 0 and i["preco"] > 0]
-    if not linhas or consumo <= 0:
-        return None
-    preco = {}
-    for i in sorted(linhas, key=lambda i: i["kwh"]):   # a linha de maior kWh prevalece
-        preco[round(i["icms"])] = i["preco"]
-    p12, p17 = preco.get(12), preco.get(17)
-    if p12 is None and p17 is None:   # alíquota fora do padrão de SC: média ponderada
-        return sum(i["kwh"] * i["preco"] for i in linhas) / sum(i["kwh"] for i in linhas)
-    if p17 is None:
-        p17 = p12 * _FATOR_ICMS_12_17
-    if not any(round(i["icms"]) == 12 for i in itens):
-        return p17
-    if p12 is None:
-        p12 = p17 / _FATOR_ICMS_12_17
-    k12 = min(_CELESC_FAIXA_12, consumo)
-    return (k12 * p12 + (consumo - k12) * p17) / consumo
+def _celesc_preco_medio(itens: list[dict], codigos):
+    """Preço unitário impresso, ponderado pelo kWh, das linhas com esses códigos
+    (em módulo: o crédito da geração local vem com preço negativo)."""
+    linhas = [i for i in itens if i["codigo"] in codigos and i["kwh"] > 0]
+    total = sum(i["kwh"] for i in linhas)
+    return sum(i["kwh"] * abs(i["preco"]) for i in linhas) / total if total else None
 
 
 def _processar_celesc(dados: dict) -> dict:
@@ -540,14 +518,12 @@ def _processar_celesc(dados: dict) -> dict:
     Faturas CELESC: consumo, injetada, tipo de GD e as quatro tarifas saem das
     linhas transcritas, nunca da conta da IA.
       * consumo  = kWh de 0P + 0Q + 0R;  injetada = kWh das linhas (12)
-      * tarifa de consumo = _celesc_tarifa_consumo (0P para TE, 0S para TUSD)
-      * compensada, com 0Q/0R/0T na fatura = tarifa_consumo − (o que a fatura
-        cobrou sobre a parte compensada) / injetada, isto é, 0Q+0R+12 (TE) ou
-        0T+13 (TUSD). Assim a compensada nunca passa da de consumo: a 0P,
-        cobrada a 12%, fica de fora.
-      * compensada, sem 0Q/0R/0T = (consumo × tarifa_consumo − Σ valores) /
-        injetada, com Σ = 0P+12 (TE) ou 0S+13 (TUSD). Na compartilhada isso
-        dá o preço do item (12)/(13), e o conc_com reproduz a fatura.
+      * tarifas pelos preços unitários impressos (sem correção de ICMS), cada
+        um ponderado pelo kWh quando há mais de uma linha (faixas de ICMS):
+        consumo    = preço de 0P (TE) / 0S (TUSD)
+        compensada, com 0Q/0R/0T = consumo − (preço de 0Q+0R − preço de 12) na TE,
+                                   consumo − (preço de 0T − preço de 13) na TUSD
+        compensada, sem eles     = preço de 12 (TE) / 13 (TUSD)
       * tipo_gd = GD2 se alguma linha tem o marcador "G2"; senão GD1.
     Sem as linhas, a fatura fica com a leitura da IA.
     """
@@ -569,9 +545,6 @@ def _processar_celesc(dados: dict) -> dict:
     def kwh(cods):
         return sum(i["kwh"] for i in itens if i["codigo"] in cods)
 
-    def valor(cods):
-        return sum(i["valor"] for i in itens if i["codigo"] in cods)
-
     consumo = kwh(_CELESC_CONSUMO)
     inj     = kwh({"12"})
     if consumo > 0:
@@ -580,18 +553,19 @@ def _processar_celesc(dados: dict) -> dict:
     dados["grupo"] = "GER"
     dados["scee_beneficio_bruto"] = dados["scee_beneficio_liquido"] = 0   # (6U)/(73) se anulam
 
-    for pre, cod, linhas in (("te", "0P", _CELESC_TE), ("tusd", "0S", _CELESC_TUSD)):
-        t = _celesc_tarifa_consumo(itens, cod, consumo)
+    for pre, (cod, compensado, credito) in _CELESC_LINHAS.items():
+        t = _celesc_preco_medio(itens, {cod})
         if t is None:
             continue
         dados[f"{pre}_consumo"] = round(t, 6)
-        if not inj:
+        p_cred = _celesc_preco_medio(itens, {credito}) if inj else None
+        p_comp = _celesc_preco_medio(itens, compensado)
+        if p_cred is None:
             dados[f"{pre}_compensada"] = None
-        elif kwh(_CELESC_COMPENSADO) > 0:
-            cobrado = valor(linhas - {"0P", "0S"})   # parte compensada + crédito
-            dados[f"{pre}_compensada"] = round(t - cobrado / inj, 6)
+        elif p_comp is not None:
+            dados[f"{pre}_compensada"] = round(t - (p_comp - p_cred), 6)
         else:
-            dados[f"{pre}_compensada"] = round((consumo * t - valor(linhas)) / inj, 6)
+            dados[f"{pre}_compensada"] = round(p_cred, 6)
 
     # A Celesc marca com "G2" toda linha de GD2 — créditos (12)/(13) e benefício
     # tarifário (6U)/(73). Sem "G2" é GD1, inclusive a geração local sem marcador.
@@ -605,7 +579,7 @@ def _processar_celesc(dados: dict) -> dict:
     # Itens 0Q/0T (consumo compensado na própria fatura) ou geração local
     # (crédito sem "oUC" = de outra UC) indicam autoconsumo.
     local = any(i["codigo"] == "12" and "ouc" not in i["descricao"].lower() for i in itens)
-    if kwh({"0Q", "0T"}) > 0 or local:
+    if kwh({"0Q", "0R", "0T"}) > 0 or local:
         dados["modalidade"] = "Autoconsumo"
     elif inj:
         dados["modalidade"] = "Geração Compartilhada"

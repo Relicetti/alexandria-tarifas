@@ -371,8 +371,8 @@
             <details class="border rounded p-2 small" style="background:#f0f8ff">
               <summary class="fw-semibold text-primary">⚡ Celesc — linhas lidas da fatura</summary>
               <div class="text-muted my-2" style="font-size:0.75rem">
-                Tarifa de consumo = preço c/ trib. de 0P (TE) / 0S (TUSD): primeiros 150 kWh com ICMS 12%, o resto 17%.<br>
-                Compensada com 0Q/0R/0T = tarifa de consumo − (0Q+0R+12 | 0T+13) / injetada; sem eles = (consumo × tarifa − Σ 0P+12 | 0S+13) / injetada.
+                Preços unitários impressos (média ponderada pelo kWh se houver mais de uma linha). Consumo = 0P (TE) / 0S (TUSD).<br>
+                Compensada com 0Q/0R/0T = consumo − (preço 0Q+0R − preço 12) / consumo − (preço 0T − preço 13); sem eles = preço 12 / 13.
               </div>
               <table class="table table-sm table-borderless mb-0" style="font-size:0.75rem">
                 <thead><tr><th>Item</th><th class="text-end">kWh</th><th class="text-end">Preço</th><th class="text-end">Valor R$</th><th class="text-end">ICMS %</th></tr></thead>
