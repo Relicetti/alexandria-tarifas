@@ -171,7 +171,12 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         except Exception:
             pass
 
-    pagina.wait_for_timeout(3000)
+    # espera até 20s o LexDash sair da tela de login (às vezes demora mais
+    # que alguns segundos e o login era dado como falho à toa)
+    try:
+        pagina.wait_for_url(lambda url: "login" not in url.lower(), timeout=20000)
+    except Exception:
+        pass
 
     # confirma que saiu da tela de login (URL não é mais /login)
     if "login" in pagina.url.lower():
