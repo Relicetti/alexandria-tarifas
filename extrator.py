@@ -486,12 +486,11 @@ def _processar_distribuidora(dados: dict) -> dict:
 
 # ── CELESC ────────────────────────────────────────────────────────────────────
 # A IA só transcreve as linhas do quadro de itens (celesc_itens); as contas
-# saem daqui. Uma regra para todos os formatos (GD1/GD2, local/remota, com ou
-# sem 0Q/0T), pensada para o conc_com do GER reproduzir a fatura:
-#   consumo × tarifa_consumo − injetada × tarifa_compensada = Σ valores das linhas
+# saem daqui, para todos os formatos (GD1/GD2, local/remota, com ou sem 0Q/0T).
 _CELESC_CONSUMO = {"0P", "0Q", "0R"}          # linhas de TE com o kWh consumido
 _CELESC_TE      = {"0P", "0Q", "0R", "12"}
 _CELESC_TUSD    = {"0S", "0T", "13"}
+_CELESC_COMPENSADO = {"0Q", "0R", "0T"}       # consumo compensado na própria fatura
 _CELESC_FAIXA_12 = 150                        # kWh com ICMS de 12% (SC)
 _FATOR_ICMS_12_17 = (1 - 0.12) / (1 - 0.17)  # preço c/ ICMS 12% → c/ ICMS 17%
 
@@ -542,10 +541,13 @@ def _processar_celesc(dados: dict) -> dict:
     linhas transcritas, nunca da conta da IA.
       * consumo  = kWh de 0P + 0Q + 0R;  injetada = kWh das linhas (12)
       * tarifa de consumo = _celesc_tarifa_consumo (0P para TE, 0S para TUSD)
-      * compensada = (consumo × tarifa_consumo − Σ valores) / injetada, com
-        Σ valores = 0P+0Q+0R+12 (TE) ou 0S+0T+13 (TUSD). Na compartilhada sem
-        0Q isso dá o preço do item (12)/(13); no autoconsumo, desconta o que
-        a fatura cobrou sobre a parte compensada.
+      * compensada, com 0Q/0R/0T na fatura = tarifa_consumo − (o que a fatura
+        cobrou sobre a parte compensada) / injetada, isto é, 0Q+0R+12 (TE) ou
+        0T+13 (TUSD). Assim a compensada nunca passa da de consumo: a 0P,
+        cobrada a 12%, fica de fora.
+      * compensada, sem 0Q/0R/0T = (consumo × tarifa_consumo − Σ valores) /
+        injetada, com Σ = 0P+12 (TE) ou 0S+13 (TUSD). Na compartilhada isso
+        dá o preço do item (12)/(13), e o conc_com reproduz a fatura.
       * tipo_gd = GD2 se alguma linha tem o marcador "G2"; senão GD1.
     Sem as linhas, a fatura fica com a leitura da IA.
     """
@@ -583,8 +585,13 @@ def _processar_celesc(dados: dict) -> dict:
         if t is None:
             continue
         dados[f"{pre}_consumo"] = round(t, 6)
-        dados[f"{pre}_compensada"] = (
-            round((consumo * t - valor(linhas)) / inj, 6) if inj else None)
+        if not inj:
+            dados[f"{pre}_compensada"] = None
+        elif kwh(_CELESC_COMPENSADO) > 0:
+            cobrado = valor(linhas - {"0P", "0S"})   # parte compensada + crédito
+            dados[f"{pre}_compensada"] = round(t - cobrado / inj, 6)
+        else:
+            dados[f"{pre}_compensada"] = round((consumo * t - valor(linhas)) / inj, 6)
 
     # A Celesc marca com "G2" toda linha de GD2 — créditos (12)/(13) e benefício
     # tarifário (6U)/(73). Sem "G2" é GD1, inclusive a geração local sem marcador.
