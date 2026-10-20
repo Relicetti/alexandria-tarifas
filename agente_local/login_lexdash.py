@@ -20,6 +20,7 @@ configurados.
 """
 import argparse
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -29,6 +30,9 @@ from playwright.sync_api import sync_playwright
 
 ARQUIVO_SESSAO = os.path.join(os.path.dirname(__file__), "lexdash_session.json")
 URL_LOGIN = "https://crm-lex.energiacom.vc/"
+# WebKit no Mac (mais próximo do Safari); no Windows o WebKit do Playwright é
+# instável, então usa Chromium. AGENTE_NAVEGADOR no .env força um dos dois.
+NAVEGADOR = os.environ.get("AGENTE_NAVEGADOR") or ("chromium" if sys.platform == "win32" else "webkit")
 
 
 def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
@@ -110,7 +114,7 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
     # como último recurso, se o clique/digitação falhar.
     def _digitar(campo, valor):
         campo.click(timeout=5000)
-        pagina.keyboard.press("Meta+A")
+        pagina.keyboard.press("ControlOrMeta+A")
         pagina.keyboard.press("Backspace")
         pagina.keyboard.type(valor, delay=30)
 
@@ -243,7 +247,7 @@ def _fazer_login_com_p(p, headless: bool = False, log_fn=None) -> bool:
     _log(f"Diagnostico: LEXDASH_USER lido do .env tem {len(usuario) if usuario else 0} caractere(s); "
          f"LEXDASH_PASS tem {len(senha) if senha else 0} caractere(s).")
 
-    navegador = p.webkit.launch(headless=headless)
+    navegador = getattr(p, NAVEGADOR).launch(headless=headless)
     # Em modo headless não existe janela real pra "viewport=None" seguir
     # (usaria o tamanho da janela do sistema) — fixa um tamanho de
     # desktop explícito pra não cair num layout mobile que esconde os

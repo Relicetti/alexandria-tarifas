@@ -81,7 +81,7 @@ def baixar_pendentes(p, log) -> list:
     """Abre a tela de pendentes (Streamlit), clica Atualizar e baixa o CSV
     de cadastros. Cada linha = concessionária × usina × mês × modalidade."""
     log("Baixando lista de tarifas pendentes…")
-    navegador = p.webkit.launch(headless=True)
+    navegador = getattr(p, pl.NAVEGADOR).launch(headless=True)
     try:
         ctx = navegador.new_context(ignore_https_errors=True, accept_downloads=True)
         pagina = ctx.new_page()
