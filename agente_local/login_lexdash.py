@@ -105,18 +105,40 @@ def _login_automatico(pagina, usuario: str, senha: str, log_fn=None) -> bool:
         """, [el, valor])
         return True
 
-    try:
-        if not _set_via_js(campo_usuario, usuario):
-            _log("!! Login automático: não consegui pegar o elemento do campo de usuário.")
-            return False
-        if not _set_via_js(campo_senha, senha):
-            _log("!! Login automático: não consegui pegar o elemento do campo de senha.")
-            return False
-    except Exception as e:
-        _log(f"!! Login automático: erro preenchendo campos via JS: {e}")
-        return False
+    # Digita de verdade (teclado): o formulário do LexDash ignora o valor
+    # posto via JS e mantém o botão "Entrar" desabilitado. O JS fica só
+    # como último recurso, se o clique/digitação falhar.
+    def _digitar(campo, valor):
+        campo.click(timeout=5000)
+        pagina.keyboard.press("Meta+A")
+        pagina.keyboard.press("Backspace")
+        pagina.keyboard.type(valor, delay=30)
 
-    pagina.wait_for_timeout(300)
+    try:
+        _digitar(campo_usuario, usuario)
+        _digitar(campo_senha, senha)
+    except Exception as e:
+        _log(f"Diagnostico: digitação falhou ({e}); preenchendo via JS.")
+        try:
+            if not _set_via_js(campo_usuario, usuario):
+                _log("!! Login automático: não consegui pegar o elemento do campo de usuário.")
+                return False
+            if not _set_via_js(campo_senha, senha):
+                _log("!! Login automático: não consegui pegar o elemento do campo de senha.")
+                return False
+        except Exception as e:
+            _log(f"!! Login automático: erro preenchendo campos via JS: {e}")
+            return False
+
+    # espera o botão habilitar (validação do formulário)
+    try:
+        pagina.wait_for_function(
+            "() => { const b = [...document.querySelectorAll(\"button[type='submit']\")]"
+            ".find(b => b.offsetParent !== null); return b && !b.disabled; }",
+            timeout=5000,
+        )
+    except Exception:
+        pass
 
     try:
         v_user = campo_usuario.input_value(timeout=2000)
@@ -229,6 +251,12 @@ def _fazer_login_com_p(p, headless: bool = False, log_fn=None) -> bool:
     contexto = navegador.new_context(viewport=None if not headless else {"width": 1440, "height": 900})
     pagina = contexto.new_page()
     pagina.goto(URL_LOGIN, timeout=30000, wait_until="domcontentloaded")
+    # espera o app terminar de montar a tela: digitar antes disso perde o
+    # texto quando o formulário é re-renderizado
+    try:
+        pagina.wait_for_load_state("networkidle", timeout=15000)
+    except Exception:
+        pass
 
     ok = False
     if usuario and senha:
@@ -246,8 +274,15 @@ def _fazer_login_com_p(p, headless: bool = False, log_fn=None) -> bool:
         _log("!! LEXDASH_USER/LEXDASH_PASS não configurados — não dá pra logar sem janela visível.")
 
     if ok:
-        contexto.storage_state(path=ARQUIVO_SESSAO)
-        _log(f"Sessão salva em {ARQUIVO_SESSAO}")
+        # Só salva se o login deu de fato o LexToken — senão sobrescreveria
+        # a sessão com uma vazia e ainda diria que deu certo.
+        nomes = {c["name"] for c in contexto.cookies()}
+        if "LexToken" in nomes:
+            contexto.storage_state(path=ARQUIVO_SESSAO)
+            _log(f"Sessão salva em {ARQUIVO_SESSAO}")
+        else:
+            _log("!! Login não gerou o cookie LexToken — sessão NÃO salva.")
+            ok = False
 
     navegador.close()
     return ok
