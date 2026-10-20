@@ -77,6 +77,47 @@ Pronto. A partir de agora, basta abrir o dashboard (Safari, Chrome, o que
 preferir) e clicar no botão 🖨 — o agente já está rodando em segundo plano
 e o navegador automatizado abre sozinho.
 
+## Setup no Windows (uma vez só)
+
+No Windows o agente usa o **Chromium** do Playwright (o WebKit é instável
+lá). Para forçar outro, ponha `AGENTE_NAVEGADOR=webkit` ou `chromium` no `.env`.
+Os comandos abaixo rodam no **PowerShell**, dentro da pasta `agente_local`.
+
+1. **Python 3.10+**: `winget install Python.Python.3.12` (ou pelo
+   [python.org](https://www.python.org/downloads/windows/), marcando
+   "Add python.exe to PATH").
+
+2. Dependências:
+   ```powershell
+   py -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt
+   .venv\Scripts\playwright install chromium
+   ```
+
+3. Certificado HTTPS local:
+   ```powershell
+   winget install FiloSottile.mkcert
+   # feche e reabra o PowerShell para o mkcert entrar no PATH
+   mkcert -install
+   mkcert -cert-file cert.pem -key-file key.pem localhost 127.0.0.1 ::1
+   ```
+
+4. `.env`: o mesmo do passo 4 do Mac (`notepad .env`).
+
+5. Primeiro login: `.venv\Scripts\python login_lexdash.py --headless`
+   (ou sem `--headless` para logar na mão na janela que abrir).
+
+6. Autostart (sobe escondido a cada login no Windows, pela pasta Inicializar):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\instalar_autostart_windows.ps1
+   ```
+   Para reiniciar depois de atualizar o código, rode o mesmo comando de novo.
+   Para remover: `desinstalar_autostart_windows.ps1`.
+
+A replicação de tarifas lê a tela de pendentes pelo Tailscale
+(`PENDENTES_URL`). Para ela funcionar, o PC precisa do Tailscale conectado à
+mesma rede. O botão de gravar não depende disso.
+
 ## Se algo não funcionar
 
 - **Ver o log do agente**: `cat agente_local/agente.log` (ou `tail -f` para

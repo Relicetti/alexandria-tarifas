@@ -34,6 +34,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import requests
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
+from login_lexdash import NAVEGADOR
+
 ARQUIVO_SESSAO  = os.path.join(os.path.dirname(__file__), "lexdash_session.json")
 URL_ATUALIZACOES = "https://crm-lex.energiacom.vc/fatger/atualizacao-fat"
 
@@ -630,7 +632,7 @@ def _abrir_sessao_valida(p, log_fn=None, headless=False):
             log_fn(msg)
 
     for tentativa in range(2):
-        navegador = p.webkit.launch(headless=headless)
+        navegador = getattr(p, NAVEGADOR).launch(headless=headless)
         contexto = navegador.new_context(storage_state=ARQUIVO_SESSAO, viewport=None)
         pagina = contexto.new_page()
 
@@ -642,7 +644,7 @@ def _abrir_sessao_valida(p, log_fn=None, headless=False):
             window.moveTo(0, 0);
             window.resizeTo(screen.availWidth, screen.availHeight);
         }""")
-        pagina.keyboard.press("Meta+0")
+        pagina.keyboard.press("ControlOrMeta+0")
         pagina.wait_for_timeout(500)
 
         url_atual = pagina.url.lower()
